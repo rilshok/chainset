@@ -10,6 +10,7 @@ authors = [
 ]
 dependencies = [
     "typing-extensions>=4.8.0",
+    "iokit>=0.4.2",
 ]
 
 
