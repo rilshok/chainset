@@ -2,13 +2,11 @@
 
 from typing import Any, BinaryIO, TypeVar
 
-from iokit import BufferedState, Storage
-
-from .record import Record
+from iokit import BufferedState, FormatState, Storage
 
 StorageBackend = Storage[BinaryIO]
 
-R = TypeVar("R", bound=Record[Any])
+S = TypeVar("S", bound=FormatState[Any])
 
 
 class DatasetStorage:
@@ -23,79 +21,32 @@ class DatasetStorage:
         """
         self._backend = backend
 
-    def _key(self, uid: str, origin: str, path: str) -> str:
-        return f"{uid}/{origin}/{path}"
+    def _key(self, uid: str, origin: str, key: str) -> str:
+        return f"{uid}/{origin}/{key}"
 
-    def push(self, uid: str, origin: str, record: Record[Any], *, force: bool = False) -> None:
-        """Write a record to the backend.
-
-        Args:
-            uid: Identifier of the dataset item.
-            origin: Namespace the record belongs to.
-            record: Record whose state is persisted.
-            force: Whether to overwrite an existing entry.
-
-        """
-        state = record.state
+    def push(self, uid: str, origin: str, state: FormatState[Any], *, force: bool = False) -> None:
+        """Write a state to the storage."""
         key = self._key(uid, origin, state.path)
         self._backend.push(key, state.buffer, force=force)
 
-    def pull(self, uid: str, origin: str, path: str, record_of: type[R]) -> R:
-        """Read a record from the backend.
-
-        Args:
-            uid: Identifier of the dataset item.
-            origin: Namespace the record belongs to.
-            path: Path of the stored state.
-            record_of: Record type used to rebuild the value.
-
-        Returns:
-            The record reconstructed from the stored state.
-
-        """
-        key = self._key(uid, origin, path)
+    def pull(self, uid: str, origin: str, key: str, state_t: type[S]) -> S:
+        """Read a state from the storage."""
+        key = self._key(uid, origin, key) + state_t.extension()
         buffer = self._backend.pull(key)
-        state: BufferedState[Any] = BufferedState(buffer, path=path)
-        return record_of.from_state(state)
+        state: BufferedState[Any] = BufferedState(buffer, path=key)
+        return state_t.from_state(state)
 
-    def remove(self, uid: str, origin: str, path: str) -> None:
-        """Delete a record from the backend.
-
-        Args:
-            uid: Identifier of the dataset item.
-            origin: Namespace the record belongs to.
-            path: Path of the stored state.
-
-        """
-        key = self._key(uid, origin, path)
+    def remove(self, uid: str, origin: str, key: str) -> None:
+        """Delete a state from the storage."""
+        key = self._key(uid, origin, key)
         return self._backend.remove(key)
 
-    def exists(self, uid: str, origin: str, path: str) -> bool:
-        """Check whether a record is present in the backend.
-
-        Args:
-            uid: Identifier of the dataset item.
-            origin: Namespace the record belongs to.
-            path: Path of the stored state.
-
-        Returns:
-            ``True`` if the record exists, ``False`` otherwise.
-
-        """
-        key = self._key(uid, origin, path)
+    def exists(self, uid: str, origin: str, key: str) -> bool:
+        """Check whether a state is present in the storage."""
+        key = self._key(uid, origin, key)
         return self._backend.exists(key)
 
-    def size(self, uid: str, origin: str, path: str) -> int:
-        """Report the stored size of a record.
-
-        Args:
-            uid: Identifier of the dataset item.
-            origin: Namespace the record belongs to.
-            path: Path of the stored state.
-
-        Returns:
-            The size of the stored record in bytes.
-
-        """
-        key = self._key(uid, origin, path)
+    def size(self, uid: str, origin: str, key: str) -> int:
+        """Report the stored size of a state."""
+        key = self._key(uid, origin, key)
         return self._backend.size(key)
