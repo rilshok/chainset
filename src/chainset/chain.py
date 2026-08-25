@@ -7,23 +7,32 @@ from iokit import FormatState, State
 from iokit.utils.time import Timestamp
 from typing_extensions import Self
 
-from .provider import Provider
 from .storage import DatasetStorage, StorageBackend
 
 
 class Chain:
     """Process a dataset by combining a storage backend with a data provider."""
 
-    def __init__(self, storage: StorageBackend, provider: Provider) -> None:
+    def __init__(self, storage: StorageBackend, revision: str) -> None:
         """Initialize the chain.
 
         Args:
             storage: Backend used to persist the dataset.
-            provider: Source of the dataset items.
+            revision: Revision of chain.
 
         """
-        self.storage = DatasetStorage(storage)
-        self.provider = provider
+        self._storage = DatasetStorage(storage)
+        self._revision = revision
+
+    @property
+    def storage(self) -> DatasetStorage:
+        """Backend used to persist the dataset."""
+        return self._storage
+
+    @property
+    def revision(self) -> str:
+        """Revision of chain."""
+        return self._revision
 
 
 T = TypeVar("T", bound=object)
@@ -98,7 +107,7 @@ class BoundStoredMethod(Generic[C, T]):
         self._obj = obj
         self._func = func
         self._codec = codec
-        self._origin = self._obj.__class__.__name__
+        self._origin = f"{self._obj.__class__.__name__}_{obj.revision}"
         self._key = self._func.__name__
 
     def __call__(self, uid: str) -> T:
