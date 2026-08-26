@@ -1,6 +1,7 @@
 """Chain of dataset processing steps."""
 
 from collections.abc import Callable
+from types import FunctionType
 from typing import Generic, TypeVar, overload
 
 from iokit import FormatState, State
@@ -103,11 +104,17 @@ class BoundStoredMethod(Generic[C, T]):
             func: Chain method computing a record from an item identifier.
             codec: Codec used to encode and decode the records of `func`.
 
+        Raises:
+            TypeError: If `obj` is not an instance of a direct subclass of `Chain`.
+
         """
+        if Chain not in type(obj).__bases__:
+            msg = f"Stored methods require a direct subclass of Chain, got {type(obj).__name__!r}"
+            raise TypeError(msg)
         self._obj = obj
         self._func = func
         self._codec = codec
-        self._origin = f"{self._obj.__class__.__name__}_{obj.revision}"
+        self._origin = f"{type(self._obj).__name__}_{obj.revision}"
         self._key = self._func.__name__
 
     def __call__(self, uid: str) -> T:
@@ -193,11 +200,32 @@ class StoredMethod(Generic[C, T]):
             codec: Codec used to encode and decode the records of `func`.
 
         Raises:
-            ValueError: If `func` is not a plain function.
+            TypeError: If `func` is not a plain function.
 
         """
+        if not isinstance(func, FunctionType):
+            msg = f"Stored methods must be plain functions, got {type(func).__name__!r}"
+            raise TypeError(msg)
         self._func = func
         self._codec = codec
+
+    def __set_name__(self, owner: type[C], name: str) -> None:
+        """Check that the stored method is defined on a direct subclass of `Chain`.
+
+        Args:
+            owner: Class the stored method is defined on.
+            name: Attribute name the stored method is assigned to.
+
+        Raises:
+            TypeError: If `owner` is not a direct subclass of `Chain`.
+
+        """
+        if Chain not in owner.__bases__:
+            msg = (
+                f"Stored method {name!r} must be defined on a direct subclass of Chain, "
+                f"got {owner.__name__!r}"
+            )
+            raise TypeError(msg)
 
     @overload
     def __get__(self, obj: None, objtype: type[C] | None = None) -> Self: ...
