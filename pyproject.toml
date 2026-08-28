@@ -1,0 +1,69 @@
+[project]
+name = "chainset"
+version = "0.1.0"
+description = "Chainable dataset processing"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Vladislav A. Proskurov", email = "rilshok@pm.me"},
+]
+dependencies = [
+    "typing-extensions>=4.8.0",
+    "iokit>=0.4.2",
+]
+
+
+[dependency-groups]
+dev = [
+    {include-group = "lint"},
+    {include-group = "test"},
+]
+lint = [
+    "mypy>=1.7.1",
+    "pre-commit>=4.0.0",
+    "ruff>=0.6.3",
+]
+test = [
+    "pytest>=8.2.2",
+    "pytest-cov>=6.0.0",
+    "pytest-xdist>=3.6.1",
+]
+
+
+[build-system]
+requires = ["uv_build>=0.11.29,<0.12.0"]
+build-backend = "uv_build"
+
+
+[project.urls]
+Homepage = "https://github.com/rilshok/chainset"
+Repository = "https://github.com/rilshok/chainset.git"
+Issues = "https://github.com/rilshok/chainset/issues"
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+
+
+[tool.ruff]
+line-length = 100
+
+
+[tool.ruff.format]
+docstring-code-format = true
+
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "CPY001",  # copyright lives in LICENSE, not in every file
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PLR2004", "PLR0915", "S101", "S106", "ANN201", "SLF001"]

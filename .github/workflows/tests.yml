@@ -1,0 +1,49 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: ["*"]
+
+permissions:
+  contents: write
+  checks: write
+  pull-requests: write
+
+jobs:
+  build:
+    name: Run tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: uv sync --group dev
+      - name: Run pre-commit hooks
+        uses: pre-commit/action@v3.0.1
+      - name: Run mypy
+        run: uv run mypy src tests
+      - name: Build coverage file
+        run: |
+          uv run pytest -n auto --junitxml=pytest.xml --cov-report=term-missing:skip-covered --cov=chainset tests/ | tee pytest-coverage.txt
+      - name: Pytest coverage comment
+        id: coverage
+        uses: MishaKav/pytest-coverage-comment@main
+        with:
+          pytest-coverage-path: ./pytest-coverage.txt
+          junitxml-path: ./pytest.xml
+      - name: Check for test failures
+        if: steps.coverage.outputs.failures != '0' || steps.coverage.outputs.errors != '0'
+        run: |
+          echo "Tests failed or errors occurred. Blocking PR merge."
+          exit 1
+      - name: Add Summary
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.summary.addRaw(${{ steps.coverage.outputs.summaryReport }}).write()
