@@ -14,16 +14,16 @@ from .storage import DatasetStorage, StorageBackend
 class Chain:
     """Process a dataset by combining a storage backend with a data provider."""
 
-    def __init__(self, storage: StorageBackend, revision: str) -> None:
+    def __init__(self, storage: StorageBackend, origin: str) -> None:
         """Initialize the chain.
 
         Args:
             storage: Backend used to persist the dataset.
-            revision: Revision of chain.
+            origin: Origin of chain.
 
         """
         self._storage = DatasetStorage(storage)
-        self._revision = revision
+        self._origin = origin
 
     @property
     def storage(self) -> DatasetStorage:
@@ -31,9 +31,9 @@ class Chain:
         return self._storage
 
     @property
-    def revision(self) -> str:
-        """Revision of chain."""
-        return self._revision
+    def origin(self) -> str:
+        """Origin of chain."""
+        return self._origin
 
 
 T = TypeVar("T", bound=object)
@@ -114,7 +114,7 @@ class BoundStoredMethod(Generic[C, T]):
         self._obj = obj
         self._func = func
         self._codec = codec
-        self._origin = f"{type(self._obj).__name__}_{obj.revision}"
+        self._origin = obj.origin
         self._key = self._func.__name__
 
     def __call__(self, uid: str) -> T:
