@@ -53,24 +53,30 @@ class StateCodec(Generic[T]):
         self.state_t = state_t
         self.config = config
 
-    def encode(self, data: T, key: str) -> FormatState[T]:
-        """Encode `data` into a state stored under `key`.
+    def path(self, key: str) -> str:
+        """Build the storage path for `key`, adding the format's extension.
+
+        Args:
+            key: Name of the record within the storage.
+
+        Returns:
+            The storage path for the record.
+
+        """
+        return key + self.state_t.extension()
+
+    def encode(self, data: T, path: str) -> FormatState[T]:
+        """Encode `data` into a state stored under `path`.
 
         Args:
             data: Record produced by a chain method.
-            key: Name of the record within the storage.
+            path: Storage path of the record, as returned by `path`.
 
         Returns:
             The state holding the encoded `data`.
 
         """
-        return self.state_t(
-            data,
-            stem=None,
-            path=key + self.state_t.extension(),
-            timestamp=Timestamp.now(),
-            **self.config,
-        )
+        return self.state_t(data, stem=None, path=path, timestamp=Timestamp.now(), **self.config)
 
     def decode(self, state: State[T]) -> T:
         """Decode a record from `state`.
@@ -91,12 +97,7 @@ C = TypeVar("C", bound=Chain)
 class BoundStoredMethod(Generic[C, T]):
     """Stored method bound to a chain instance."""
 
-    def __init__(
-        self,
-        obj: C,
-        func: Callable[[C, str], T],
-        codec: StateCodec[T],
-    ) -> None:
+    def __init__(self, obj: C, func: Callable[[C, str], T], codec: StateCodec[T]) -> None:
         """Initialize the bound stored method.
 
         Args:
@@ -109,7 +110,7 @@ class BoundStoredMethod(Generic[C, T]):
         self._func = func
         self._codec = codec
         self._origin = obj.origin
-        self._key = self._func.__name__
+        self._key = self._codec.path(self._func.__name__)
 
     def __call__(self, uid: str) -> T:
         """Return the record of the item `uid`, computing and storing it if needed.
@@ -154,7 +155,7 @@ class BoundStoredMethod(Generic[C, T]):
             force: Whether to overwrite an already stored record.
 
         """
-        state = self._codec.encode(record, key=self._key)
+        state = self._codec.encode(record, path=self._key)
         self._obj.storage.push(uid=uid, origin=self._origin, state=state, force=force)
 
     def remove(self, uid: str) -> None:
