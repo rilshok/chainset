@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from types import FunctionType
-from typing import Generic, TypeVar, overload
+from typing import Any, Generic, TypeVar, overload
 
 from iokit import FormatState, State
 from iokit.utils.time import Timestamp
@@ -180,12 +180,12 @@ class BoundStoredMethod(Generic[C, T]):
         return self._obj.storage.exists(uid, origin=self._origin, key=self._key)
 
 
-class StoredMethod(Generic[C, T]):
+class StoredMethod(Generic[T]):
     """Descriptor persisting the results of a chain method in the chain storage."""
 
     def __init__(
         self,
-        func: Callable[[C, str], T],
+        func: Callable[[Any, str], T],
         codec: StateCodec[T],
     ) -> None:
         """Initialize the stored method.
@@ -233,7 +233,7 @@ class StoredMethod(Generic[C, T]):
 def store_as(
     state_t: type[FormatState[T]],
     **config: object,
-) -> Callable[[Callable[[C, str], T]], StoredMethod[C, T]]:
+) -> Callable[[Callable[[Any, str], T]], StoredMethod[T]]:
     """Store the results of the decorated chain method in the given state format.
 
     Args:
@@ -246,7 +246,7 @@ def store_as(
     """
     codec = StateCodec(state_t, **config)
 
-    def decorator(func: Callable[[C, str], T]) -> StoredMethod[C, T]:
+    def decorator(func: Callable[[Any, str], T]) -> StoredMethod[T]:
         return StoredMethod(func=func, codec=codec)
 
     return decorator
