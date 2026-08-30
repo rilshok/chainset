@@ -31,7 +31,7 @@ class DatasetStorage:
 
     def pull(self, uid: str, origin: str, key: str, state_t: type[S]) -> S:
         """Read a state from the storage."""
-        key = self._key(uid, origin, key) + state_t.extension()
+        key = self._key(uid, origin, key)
         buffer = self._backend.pull(key)
         state: BufferedState[Any] = BufferedState(buffer, path=key)
         return state_t.from_state(state)
