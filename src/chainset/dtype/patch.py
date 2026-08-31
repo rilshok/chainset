@@ -2,13 +2,16 @@
 
 __all__ = [
     "Patch2D",
+    "Patch2DDat",
 ]
 import math
+import struct
 from collections.abc import Callable, Iterable, Sequence
 from itertools import pairwise
 from typing import SupportsIndex
 
 import numpy as np
+from iokit import Dat
 from numpy.typing import NDArray
 from typing_extensions import Self
 
@@ -469,6 +472,15 @@ def _clip(polygon: Sequence[Point], p: Point, q: Point) -> list[Point]:
 
 
 def _unit_interval_distance(value: float) -> float:
+    """Measure how far `value` falls outside the unit interval.
+
+    Args:
+        value: The value to measure.
+
+    Returns:
+        The distance to `[0, 1]`, or `0.0` for a value inside it.
+
+    """
     return max(0.0, -value, value - 1.0)
 
 
@@ -495,3 +507,36 @@ def _solve_bilinear_root(a: float, b: float, c: float) -> float:
     q = -0.5 * (b + math.copysign(disc, b))
     roots = (q / a, c / q) if abs(q) > _EPS else (0.0, -b / a)
     return min(roots, key=lambda t: (_unit_interval_distance(t), abs(t - 0.5)))
+
+
+class Patch2DDat(Dat[Patch2D]):
+    """Binary state holding a `Patch2D` as eight little-endian floats.
+
+    The coordinates are scaled by 100 before packing, so the five decimal
+    places a patch keeps survive the round trip through `float32`.
+    """
+
+    def dump(self, data: Patch2D) -> bytes:
+        """Pack the corners of a patch into bytes.
+
+        Args:
+            data: The patch to serialize.
+
+        Returns:
+            The eight scaled coordinates, from `p1` to `p4`, as packed floats.
+
+        """
+        return struct.pack("<8f", *(round(v * 100, 5) for p in data.points for v in p))
+
+    def parse(self, data: bytes) -> Patch2D:
+        """Rebuild a patch from its packed coordinates.
+
+        Args:
+            data: Bytes previously produced by `dump`.
+
+        Returns:
+            The patch the coordinates were taken from.
+
+        """
+        values = struct.unpack("<8f", data)
+        return Patch2D((values[i] / 100, values[i + 1] / 100) for i in range(0, 8, 2))
