@@ -3,6 +3,7 @@
 __all__ = [
     "Patch2D",
     "Patch2DDat",
+    "Patch2DTxt",
 ]
 import math
 import struct
@@ -11,7 +12,7 @@ from itertools import pairwise
 from typing import SupportsIndex
 
 import numpy as np
-from iokit import Dat
+from iokit import Dat, Txt
 from numpy.typing import NDArray
 from typing_extensions import Self
 
@@ -540,3 +541,36 @@ class Patch2DDat(Dat[Patch2D]):
         """
         values = struct.unpack("<8f", data)
         return Patch2D((values[i] / 100, values[i + 1] / 100) for i in range(0, 8, 2))
+
+
+class Patch2DTxt(Txt[Patch2D]):
+    """Text state holding a `Patch2D` as eight comma separated coordinates.
+
+    The coordinates are written in corner order, from `p1` to `p4`, and left
+    unscaled, which keeps the file readable where `Patch2DDat` keeps it compact.
+    """
+
+    def dump(self, data: Patch2D) -> str:
+        """Write the coordinates of a patch as text.
+
+        Args:
+            data: The patch to serialize.
+
+        Returns:
+            The eight coordinates, from `p1` to `p4`, separated by commas.
+
+        """
+        return ",".join(str(v) for p in data.points for v in p)
+
+    def parse(self, data: str) -> Patch2D:
+        """Rebuild a patch from its written coordinates.
+
+        Args:
+            data: Text previously produced by `dump`.
+
+        Returns:
+            The patch the coordinates were taken from.
+
+        """
+        values = [float(v) for v in data.split(",")]
+        return Patch2D(values[i : i + 2] for i in range(0, len(values), 2))
