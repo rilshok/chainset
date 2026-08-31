@@ -6,6 +6,7 @@ import json
 from iokit import Data, Json, StreamMemoryStorage
 
 from chainset import Chain, store_as
+from chainset.storage import StorageBackend
 
 
 class TextData:
@@ -32,12 +33,25 @@ class HashChain(Chain):
     """Chain that hashes UIDs and counts how many times it actually ran."""
 
     counter: int
+    alg: str
+
+    def __init__(self, storage: StorageBackend, alg: str) -> None:
+        """Initialize the chain.
+
+        Args:
+            storage: Backend used to persist the dataset.
+            alg: Hashing algorithm, also used as the chain origin.
+
+        """
+        super().__init__(storage)
+        self.alg = alg
+        self.origin = alg
 
     @store_as(TextJson)
     def id_digest(self, uid: str) -> TextData:
         """Hash ``uid`` with the chain's origin, counting the call."""
         self.counter += 1
-        return TextData(Data.from_ascii(uid).digest(self.origin).hex())
+        return TextData(Data.from_ascii(uid).digest(self.alg).hex())
 
 
 def _hexdigest(value: str, algorithm: str) -> str:
@@ -48,14 +62,14 @@ def _hexdigest(value: str, algorithm: str) -> str:
 def test_de_serialization() -> None:
     """Results are cached per origin and (de)serialized to the storage."""
     storage = StreamMemoryStorage()
-    chain = HashChain(storage=storage, origin="sha256")
+    chain = HashChain(storage=storage, alg="sha256")
     chain.counter = 0
     assert chain.id_digest("123").content == _hexdigest("123", "sha256")
     assert chain.id_digest("234").content == _hexdigest("234", "sha256")
     assert chain.id_digest("123").content == _hexdigest("123", "sha256")
     assert chain.counter == 2
 
-    chain = HashChain(storage=storage, origin="md5")
+    chain = HashChain(storage=storage, alg="md5")
     chain.counter = 0
     assert chain.id_digest("123").content == _hexdigest("123", "md5")
 
