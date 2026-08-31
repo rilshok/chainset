@@ -1,18 +1,17 @@
-import math
 import urllib.request
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO
 
 import numpy as np
-import torch
 from iokit import Data, Jpeg, Png
+from iokit.dtype.extension import Extension
 from iokit.state import Image as ImageFormatState
 from numpy.typing import NDArray
 from PIL import Image as PILImage
 
 from chainset.dtype.patch import Patch2D
-from iokit.dtype.extension import Extension
+from chainset.utils.image_patch_sampling import WHITE, FillValue, sample_quad_uint8
 
 RGBArray = NDArray[np.uint8]
 PathLike = str | Path
@@ -42,7 +41,7 @@ def _assert_rgb_array(array: RGBArray) -> None:
         raise ValueError(msg)
 
 
-def pil_to_rgb(image: PILImage.Image) -> RGBArray:
+def _pil_to_rgb(image: PILImage.Image) -> RGBArray:
     """Convert a PIL image to an RGB array, flattening alpha onto white."""
     if image.mode == "RGB":
         return np.array(image, dtype=np.uint8)
@@ -125,8 +124,20 @@ class RGBImage(ABC):
     def loaded(self) -> "LoadedRGBImage":
         return LoadedRGBImage(self.array())
 
-    def cut(self, patch: Patch2D) -> "PatchRGBImage":
-        return PatchRGBImage(image=self, patch=patch)
+    def cut(self, patch: Patch2D, *, fill: FillValue = WHITE) -> "PatchRGBImage":
+        """Cut `patch` out of the image, warping it back to an upright rectangle.
+
+        Args:
+            patch: Region to cut, in coordinates relative to the image.
+            fill: What to use where the patch reaches past the image: one
+                level for all three channels, or an `(r, g, b)` colour.
+                Defaults to white.
+
+        Returns:
+            The patch as an image of its own.
+
+        """
+        return PatchRGBImage(image=self, patch=patch, fill=fill)
 
     def rot90(self, k: int) -> "PatchRGBImage":
         """Rotate the image counter-clockwise by `k` quarter turns.
@@ -282,71 +293,66 @@ class WebRGBImage(RGBImage):
         return super().data(extension)
 
 
-class PatchRGBImage(RGBImage):
-    __slots__ = ("patch", "source")
+def _patch_shape(patch: Patch2D, width: int | None, height: int | None) -> tuple[int, int]:
+    """Pick the size of a cut, filling in whichever side the caller left open.
 
-    def __init__(self, image: RGBImage, patch: Patch2D) -> None:
+    Args:
+        patch: The patch to cut, in pixels.
+        width: Requested width, or `None` to take it from the patch.
+        height: Requested height, or `None` to take it from the patch.
+
+    Returns:
+        The height and width of the result, never smaller than one pixel.
+
+    """
+    across, down = patch.width_max, patch.height_max
+    if width is None and height is not None:
+        width = round(height * across / down) if down else 1
+    if height is None and width is not None:
+        height = round(width * down / across) if across else 1
+    if width is None or height is None:
+        width, height = round(across), round(down)
+    return max(1, height), max(1, width)
+
+
+class PatchRGBImage(RGBImage):
+    __slots__ = ("fill", "patch", "source")
+
+    def __init__(self, image: RGBImage, patch: Patch2D, fill: FillValue = WHITE) -> None:
         self.source = image
         self.patch = patch
+        self.fill = fill
 
     def array(self, *, width: int | None = None, height: int | None = None) -> RGBArray:
-        array = self.source.array()
-        h, w = array.shape[:2]
+        """Cut the patch out of the source image, warped back upright.
 
-        patch = self.patch.to_pixels(width=w, height=h)
+        Args:
+            width: Width of the result; derived from `height` and the shape of
+                the patch when left out.
+            height: Height of the result; derived the same way from `width`.
 
-        if width is None and height is None:
-            width = round(patch.width_max)
-            height = round(patch.height_max)
-        elif width is None:
-            if height is None:
-                msg = "Both width and height are None after initial check"
-                raise SystemError(msg)
-            width = round(height * patch.width_max / patch.height_max)
-        elif height is None:
-            height = round(width * patch.height_max / patch.width_max)
+        Returns:
+            The patch as an RGB array.
 
-        x, y = patch.meshgrid(width=width, height=height)
-
-        box = patch.box
-        x0 = max(0, math.floor(box.x1) - 1)
-        x1 = min(w, math.ceil(box.x2) + 2)
-        y0 = max(0, math.floor(box.y1) - 1)
-        y1 = min(h, math.ceil(box.y3) + 2)
-        crop = array[y0:y1, x0:x1]
-        crop_h, crop_w = crop.shape[:2]
-
-        grid = np.stack(
-            (
-                2 * (x - x0) / crop_w - 1.0,
-                2 * (y - y0) / crop_h - 1.0,
-            ),
-            axis=-1,
-        ).astype(np.float32)
-
-        with torch.inference_mode():
-            crop_array = np.ascontiguousarray(crop)
-            i = torch.from_numpy(crop_array).permute(2, 0, 1).unsqueeze(0).to(torch.float32)
-            g = torch.from_numpy(grid).unsqueeze(0)
-            r = torch.nn.functional.grid_sample(
-                i,
-                grid=g,
-                mode="bilinear",
-                padding_mode="zeros",
-                align_corners=False,
-            )
-
-        return r[0].permute(1, 2, 0).numpy().clip(0, 255).astype(np.uint8)
+        """
+        source = self.source.loaded.source
+        patch = self.patch.to_pixels(width=source.shape[1], height=source.shape[0])
+        return sample_quad_uint8(
+            source,
+            patch.points,
+            _patch_shape(patch, width=width, height=height),
+            fill=self.fill,
+        )
 
     @property
     def width(self) -> int:
         patch = self.patch.to_pixels(width=self.source.width, height=self.source.height)
-        return round(patch.width_max)
+        return _patch_shape(patch, width=None, height=None)[1]
 
     @property
     def height(self) -> int:
         patch = self.patch.to_pixels(width=self.source.width, height=self.source.height)
-        return round(patch.height_max)
+        return _patch_shape(patch, width=None, height=None)[0]
 
     def rot90(self, k: int) -> "PatchRGBImage":
-        return type(self)(image=self.source, patch=self.patch.shift(k))
+        return type(self)(image=self.source, patch=self.patch.shift(k), fill=self.fill)

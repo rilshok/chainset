@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 ultra = [
     "numpy>=1.21.1",
+    "pillow",
 ]
 
 [dependency-groups]
