@@ -8,7 +8,7 @@ from iokit import FormatState, State
 from iokit.utils.time import Timestamp
 from typing_extensions import Self
 
-from .storage import DatasetStorage, StorageBackend
+from chainset.storage import DatasetStorage, LikeStorage, dataset_storage
 
 
 class Chain:
@@ -16,14 +16,14 @@ class Chain:
 
     origin: str | None = None
 
-    def __init__(self, storage: StorageBackend) -> None:
+    def __init__(self, storage: LikeStorage = None) -> None:
         """Initialize the chain.
 
         Args:
             storage: Backend used to persist the records.
 
         """
-        self._storage = DatasetStorage(storage)
+        self._storage = dataset_storage(storage)
 
     @property
     def storage(self) -> DatasetStorage:

@@ -1,8 +1,23 @@
 """Storage backend for datasets."""
 
+__all__ = [
+    "DatasetStorage",
+    "LikeStorage",
+    "StorageBackend",
+    "dataset_storage",
+]
+
+from pathlib import Path
 from typing import Any, BinaryIO, TypeVar
 
-from iokit import BufferedState, FormatState, Storage
+from iokit import (
+    BufferedState,
+    FormatState,
+    MemoryStorage,
+    Storage,
+    StreamLocalStorage,
+    StreamMemoryStorage,
+)
 
 StorageBackend = Storage[BinaryIO]
 
@@ -50,3 +65,32 @@ class DatasetStorage:
         """Report the stored size of a state."""
         key = self._key(uid, origin, key)
         return self._backend.size(key)
+
+
+LikeStorage = None | dict[str, bytes] | MemoryStorage | str | Path | StorageBackend | DatasetStorage
+
+
+def dataset_storage(storage: LikeStorage) -> DatasetStorage:
+    """Coerce a storage-like value into a dataset storage.
+
+    Args:
+        storage: Existing storage, a backend, a mapping or path to build one from,
+            or `None` for an in-memory storage.
+
+    Returns:
+        The dataset storage backed by `storage`.
+
+    """
+    if isinstance(storage, DatasetStorage):
+        return storage
+    if storage is None:
+        storage = {}
+    if isinstance(storage, dict):
+        storage = MemoryStorage(storage)
+    if isinstance(storage, MemoryStorage):
+        storage = StreamMemoryStorage(storage)
+    if isinstance(storage, str):
+        storage = Path(storage).resolve()
+    if isinstance(storage, Path):
+        storage = StreamLocalStorage(storage)
+    return DatasetStorage(storage)
