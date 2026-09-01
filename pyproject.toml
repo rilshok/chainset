@@ -73,6 +73,8 @@ ignore = [
     "F403",
     "PLR2004",
     "RUF100",
+    "TD",
+    "FIX",
 ]
 
 [tool.ruff.lint.per-file-ignores]
