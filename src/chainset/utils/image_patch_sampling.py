@@ -41,7 +41,6 @@ FillValue = float | Sequence[float]
 # The default fill: a patch reaching past the image is padded with white.
 WHITE = 255.0
 
-_ONE = np.float32(1.0)
 _HALF = np.float32(0.5)
 _CORNERS = 4
 _GRID_NDIM = 3
