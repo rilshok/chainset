@@ -321,12 +321,12 @@ class LoadedRGBImage(RGBImage):
     @property
     def width(self) -> int:
         """Width of the image in pixels."""
-        return self.source.shape[1]
+        return int(self.source.shape[1])
 
     @property
     def height(self) -> int:
         """Height of the image in pixels."""
-        return self.source.shape[0]
+        return int(self.source.shape[0])
 
     @property
     def loaded(self) -> "LoadedRGBImage":
