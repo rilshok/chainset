@@ -235,7 +235,7 @@ class RGBImage(ABC):
 
     def _repr_html_(self) -> str:
         """Show the image inline in a notebook, as an embedded JPEG."""
-        content = self.data(Extension.JPEG).base64
+        content = self.to_jpeg().data.base64
         return f'<img src="data:image/jpeg;base64,{content}" />'
 
     @property
