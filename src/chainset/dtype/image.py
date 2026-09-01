@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 import numpy as np
-from iokit import Data, Jpeg, Png, web
+from iokit import Jpeg, Png, web
 from iokit.dtype.extension import Extension
 from iokit.state import Image as ImageFormatState
 from numpy.typing import NDArray
@@ -19,27 +19,6 @@ PathLike = str | Path
 
 
 # TODO(@rilshok): when touching the arr, calculate h and w and vice versa
-
-
-def _normalize_extension(extension: str | Extension) -> Extension:
-    """Read an image extension, with or without its leading dot.
-
-    Args:
-        extension: The extension to read, such as `"png"` or `".png"`.
-
-    Returns:
-        The matching `Extension`.
-
-    Raises:
-        NotImplementedError: If `extension` names anything but `.jpeg` or `.png`.
-
-    """
-    if isinstance(extension, str):
-        extension = f".{extension.removeprefix('.')}"
-        extension = Extension(extension)
-    if extension not in {Extension.JPEG, Extension.PNG}:
-        raise NotImplementedError
-    return extension
 
 
 def _assert_rgb_array(array: RGBArray) -> None:
@@ -211,27 +190,6 @@ class RGBImage(ABC):
 
         """
         return Png(self.pil, stem=stem)
-
-    def data(self, extension: str | Extension) -> Data:
-        """Encode the image in the format `extension` names.
-
-        Args:
-            extension: The format to encode in, `.jpeg` or `.png`.
-
-        Returns:
-            The encoded bytes.
-
-        Raises:
-            NotImplementedError: If `extension` names another format.
-
-        """
-        match _normalize_extension(extension):
-            case Extension.JPEG | Extension.JPG:
-                return self.to_jpeg().data
-            case Extension.PNG:
-                return self.to_png().data
-            case _:
-                raise NotImplementedError
 
     def _repr_html_(self) -> str:
         """Show the image inline in a notebook, as an embedded JPEG."""
@@ -417,27 +375,6 @@ class FileRGBImage(RGBImage):
             self._width = shape[1]
         return self._height
 
-    def data(self, extension: str | Extension) -> Data:
-        """Encode the image in the format `extension` names.
-
-        Args:
-            extension: The format to encode in, `.jpeg` or `.png`.
-
-        Returns:
-            The bytes of the file itself when it already carries that
-            extension, which skips a decode and a re-encode; otherwise the
-            encoded image.
-
-        Raises:
-            NotImplementedError: If `extension` names another format.
-
-        """
-        extension = _normalize_extension(extension)
-        source_path = Path(self.source)
-        if source_path.name.lower().endswith(extension.value):
-            return Data(source_path.read_bytes())
-        return super().data(extension)
-
 
 class WebRGBImage(RGBImage):
     """An image fetched over the network on demand, refetched on every call."""
@@ -515,25 +452,6 @@ class WebRGBImage(RGBImage):
             msg = "Failed to determine image height after fetching"
             raise SystemError(msg)
         return self._height
-
-    def data(self, extension: str | Extension) -> Data:
-        """Encode the image in the format `extension` names.
-
-        Args:
-            extension: The format to encode in, `.jpeg` or `.png`.
-
-        Returns:
-            The bytes as served when the URI already ends in that extension,
-            which skips a decode and a re-encode; otherwise the encoded image.
-
-        Raises:
-            NotImplementedError: If `extension` names another format.
-
-        """
-        extension = _normalize_extension(extension)
-        if self.source.lower().endswith(extension.value):
-            return web(self.source).data
-        return super().data(extension)
 
 
 def _patch_shape(patch: Patch2D, width: int | None, height: int | None) -> tuple[int, int]:
