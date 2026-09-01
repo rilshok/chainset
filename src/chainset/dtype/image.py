@@ -1,5 +1,15 @@
 """Images backed by an array, a file, a URL or a patch of another image."""
 
+__all__ = [
+    "FileRGBImage",
+    "LoadedRGBImage",
+    "PatchRGBImage",
+    "RGBImage",
+    "RGBImageJpeg",
+    "RGBImagePng",
+    "WebRGBImage",
+]
+
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO
@@ -61,7 +71,7 @@ def _pil_to_rgb(image: PILImage.Image) -> RGBArray:
     return np.array(background, dtype=np.uint8)
 
 
-def load_image_safe(buffer: PathLike | BinaryIO) -> RGBArray:
+def _load_rgb_image_safe(buffer: PathLike | BinaryIO) -> RGBArray:
     """Load an image from a path or an open stream, as an RGB array.
 
     Args:
@@ -230,7 +240,7 @@ class RGBImage(ABC):
         return self.cut(Patch2D.from_xyxy(0.0, 0.0, 1.0, 1.0).shift(k))
 
 
-class RGBImageState(ImageFormatState[RGBImage]):
+class _RGBImageState(ImageFormatState[RGBImage]):
     """Base `iokit` state that carries an `RGBImage` in an image format."""
 
     def dump(self, data: RGBImage) -> PILImage.Image:
@@ -258,13 +268,13 @@ class RGBImageState(ImageFormatState[RGBImage]):
         return LoadedRGBImage(_pil_to_rgb(data))
 
 
-class RGBImageJpeg(RGBImageState):
+class RGBImageJpeg(_RGBImageState):
     """An `RGBImage` stored as JPEG."""
 
     __extension__ = Extension.JPEG
 
 
-class RGBImagePng(RGBImageState):
+class RGBImagePng(_RGBImageState):
     """An `RGBImage` stored as PNG."""
 
     __extension__ = Extension.PNG
@@ -352,7 +362,7 @@ class FileRGBImage(RGBImage):
 
         """
         return _maybe_resize_array(
-            array=load_image_safe(self.source),
+            array=_load_rgb_image_safe(self.source),
             width=width,
             height=height,
         )
@@ -406,7 +416,7 @@ class WebRGBImage(RGBImage):
 
         """
         with web(self.source).buffer as buffer:
-            array = load_image_safe(buffer)
+            array = _load_rgb_image_safe(buffer)
         self._height, self._width = array.shape[:2]
         return array
 
