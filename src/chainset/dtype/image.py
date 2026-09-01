@@ -1,12 +1,11 @@
 """Images backed by an array, a file, a URL or a patch of another image."""
 
-import urllib.request
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO
 
 import numpy as np
-from iokit import Data, Jpeg, Png
+from iokit import Data, Jpeg, Png, web
 from iokit.dtype.extension import Extension
 from iokit.state import Image as ImageFormatState
 from numpy.typing import NDArray
@@ -462,26 +461,6 @@ class WebRGBImage(RGBImage):
         self._width: int | None = None
         self._height: int | None = None
 
-    def _fetch_bytes(self) -> BinaryIO:
-        """Open the URI and give the response as a stream.
-
-        Returns:
-            The open response, for the caller to close.
-
-        Raises:
-            ValueError: If the URI uses a scheme other than http, https or data.
-
-        """
-        # guard against non-web schemes (file:, ftp:, ...) before opening (S310).
-        if not self.source.startswith(("http://", "https://", "data:")):
-            msg = "WebImage uri must use the http, https or data scheme"
-            raise ValueError(msg)
-        request = urllib.request.Request(  # noqa: S310
-            self.source,
-            headers={"User-Agent": "Mozilla/5.0"},
-        )
-        return urllib.request.urlopen(request)  # noqa: S310
-
     def _fetch(self) -> RGBArray:
         """Fetch and decode the image, keeping its size for the size properties.
 
@@ -489,7 +468,7 @@ class WebRGBImage(RGBImage):
             The pixels as `uint8` of shape `(height, width, 3)`.
 
         """
-        with self._fetch_bytes() as buffer:
+        with web(self.source).buffer as buffer:
             array = load_image_safe(buffer)
         self._height, self._width = array.shape[:2]
         return array
@@ -553,7 +532,7 @@ class WebRGBImage(RGBImage):
         """
         extension = _normalize_extension(extension)
         if self.source.lower().endswith(extension.value):
-            return Data(self._fetch_bytes().read())
+            return web(self.source).data
         return super().data(extension)
 
 
