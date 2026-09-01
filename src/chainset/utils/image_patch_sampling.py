@@ -1,18 +1,15 @@
 """Bilinear sampling of a 2-D image.
 
-Replaces the one call into `torch.nn.functional.grid_sample` that cutting a
-patch needs. Two ways in: `sample_quad_uint8` cuts the quadrilateral named by
-four corners, which is what warping a patch amounts to, and the `grid_*`
-functions sample an arbitrary grid of locations. Everything outside the image
-reads a constant that defaults to white.
+`sample_quad_uint8` cuts the quadrilateral named by four corners, which is
+what warping a patch amounts to. Everything outside the image reads a
+constant that defaults to white.
 
-The quadrilateral a patch names maps onto the source bilinearly, so a source
-coordinate is an affine ramp along every output row. Cutting therefore never
-builds a grid: each band of output rows derives its coordinates from the
-corners in two operations. When the corners say the patch is upright, the two
-axes separate, and a band is resampled one axis at a time - every source row
-is blended across once and then shared by the output rows drawing on it,
-instead of being gathered per output cell.
+The quadrilateral maps onto the source bilinearly, so a source coordinate is
+an affine ramp along every output row: a band of output rows derives its
+coordinates from the corners in two operations, without building a grid. When
+the corners describe an upright rectangle the two axes separate, and a band is
+resampled one axis at a time, so every source row is blended across once and
+then shared by the output rows that draw on it.
 """
 
 __all__ = [
@@ -52,8 +49,8 @@ _GRID_COORDS = 2
 _UINT8_MIN = 0
 _UINT8_MAX = 255
 
-# Output cells per band. Enough to amortize the per-call overhead of NumPy,
-# few enough to keep the working set of a band in cache.
+# Output cells per band: enough to amortize NumPy's per-call overhead, few
+# enough to keep a band in cache.
 _CELLS_PER_BAND = 16384
 
 
@@ -84,8 +81,7 @@ def _bordered_planes(image: SampleArray, levels: NDArray[np.float64]) -> SampleA
     """Copy `image` into planes ringed by the fill, one plane per channel.
 
     The ring is one pixel on the top and left and two on the bottom and right,
-    which lets a clamped coordinate address all four of its neighbours without
-    any of them needing a bounds check of its own.
+    so a clamped coordinate can address all four of its neighbors unchecked.
     """
     height, width, channels = image.shape
     bordered = np.empty((height + 3, width + 3, channels), dtype=image.dtype)
@@ -101,9 +97,9 @@ def _bordered_planes(image: SampleArray, levels: NDArray[np.float64]) -> SampleA
 def _locate(pixels: NDArray[np.float32], size: int) -> Axis:
     """Bracket pixel coordinates on a `size`-long axis of a bordered plane.
 
-    Consumes `pixels`. Clamping to one pixel outside the image leaves a
-    coordinate that is further out sitting on the border with a zero fraction,
-    so it reads the fill and nothing else.
+    Overwrites `pixels`. Clamping to one pixel outside the image leaves a
+    coordinate that is further out on the border with a zero fraction, so it
+    reads the fill and nothing else.
     """
     np.clip(pixels, -1.0, size, out=pixels)
     floor = np.floor(pixels)
@@ -121,9 +117,9 @@ def _lerp(
 ) -> NDArray[np.float32]:
     """Walk `fraction` of the way from `start` to `end`.
 
-    `start + (end - start) * fraction` rounds once less than a weighted sum of
-    the two, returns the ends of the interval untouched, and for a `uint8`
-    image takes the difference in exact integer arithmetic.
+    `start + (end - start) * fraction` rounds once less than a weighted sum,
+    returns the ends of the interval untouched, and for a `uint8` image takes
+    the difference in exact integer arithmetic.
     """
     walked: NDArray[np.float32] = np.subtract(end, start, dtype=difference) * fraction
     walked += cast("NDArray[np.float32]", start)
@@ -131,15 +127,15 @@ def _lerp(
 
 
 def _ramp(length: int) -> NDArray[np.float64]:
-    """Give the cell centres of a `length`-long axis, as fractions of it."""
+    """Give the cell centers of a `length`-long axis, as fractions of it."""
     return (np.arange(length, dtype=np.float64) + 0.5) / length
 
 
 def _quad_coordinates(corners: Corners, shape: tuple[int, int], rows: int) -> Coordinates:
     """Yield the source coordinates of each band of output rows of a quadrilateral.
 
-    A corner pair fixes the source point at each end of an output row, so
-    within a row the coordinates are an affine ramp and a whole band costs one
+    A corner pair fixes the source point at each end of an output row, so the
+    coordinates along a row are an affine ramp and a whole band costs one
     multiply and one add per axis.
     """
     (x1, y1), (x2, y2), (x3, y3), (x4, y4) = ((float(x), float(y)) for x, y in corners)
@@ -166,7 +162,7 @@ def _scattered_bands(
     out: NDArray[np.generic],
     difference: DifferenceDtype,
 ) -> Iterator[Band]:
-    """Blend the four neighbours of every output cell, a band of rows at a time."""
+    """Blend the four neighbors of every output cell, a band of rows at a time."""
     channels, bordered_height, stride = planes.shape
     flat = planes.reshape(channels, -1)
     last = flat.shape[1] - stride - 2
@@ -219,7 +215,7 @@ def _collect(
 ) -> NDArray[np.generic]:
     """Quantize each band and scatter its planes into the interleaved output."""
     quantizing = out.dtype == np.uint8
-    # A blend of source pixels cannot leave their range, so only a float
+    # A blend cannot leave the range of the source pixels, so only a float
     # source, whose own values may sit outside it, needs clipping.
     clipping = quantizing and source_dtype != np.uint8
     for target, band in bands:
@@ -227,7 +223,7 @@ def _collect(
             np.clip(band, _UINT8_MIN, _UINT8_MAX, out=band)
         if quantizing:
             np.add(band, _HALF, out=band)
-        # Scattering the planes one at a time beats transposing the band: a
+        # Scattering plane by plane beats transposing the band, because a
         # three-byte interleaved copy is a slow path in NumPy.
         for channel in range(band.shape[0]):
             target[..., channel] = band[channel]
@@ -273,9 +269,9 @@ def _turned(corners: Corners) -> bool:
 def _crop(image: SampleArray, corners: Corners) -> tuple[SampleArray, Corners]:
     """Narrow the source to the pixels the quadrilateral can reach.
 
-    Corners are corner coordinates: `(0, 0)` is the top left of the image, so
-    the centre of the first pixel lies at `(0.5, 0.5)`. The returned corners
-    are moved into the crop and onto pixel centres, which is what the sampler
+    `corners` holds corner coordinates: `(0, 0)` is the top left of the image,
+    so the center of the first pixel lies at `(0.5, 0.5)`. The returned corners
+    are moved into the crop and onto pixel centers, which is what the sampler
     reads.
     """
     height, width = image.shape[0], image.shape[1]
@@ -301,13 +297,13 @@ def sample_quad_uint8(
     The corners run around the quadrilateral, `corners[0]` landing on the top
     left of the result and `corners[1]` on its top right. Output cells sample
     the bilinear map between them, so an upright rectangle is a plain resize
-    and a turned or skewed one is warped back to a rectangle.
+    and a turned or skewed one is warped back into a rectangle.
 
     Args:
         image: Source image of shape `(height, width, channels)`, `uint8` or
             `float32`, possibly a non-contiguous view.
         corners: The four corners in patch order, in source pixels measured
-            from the top left, so the first pixel is centred on `(0.5, 0.5)`.
+            from the top left, so the first pixel is centered on `(0.5, 0.5)`.
         shape: Height and width of the result.
         fill: What to read outside the image, one level or one per channel.
 
