@@ -1,39 +1,34 @@
-"""Chain of dataset processing steps."""
+"""Chains whose method results are persisted in a storage."""
 
 from collections.abc import Callable
 from types import FunctionType
-from typing import Any, Generic, TypeVar, overload
+from typing import Any, Generic, TypeVar, cast, overload
 
 from iokit import FormatState, State
 from iokit.utils.time import Timestamp
 from typing_extensions import Self
 
-from .storage import DatasetStorage, StorageBackend
+from chainset.storage import DatasetStorage, LikeStorage, dataset_storage
 
 
 class Chain:
-    """Process a dataset by combining a storage backend with a data provider."""
+    """Base class for chains, holding the storage their stored methods use."""
 
-    def __init__(self, storage: StorageBackend, origin: str) -> None:
+    origin: str | None = None
+
+    def __init__(self, storage: LikeStorage = None) -> None:
         """Initialize the chain.
 
         Args:
-            storage: Backend used to persist the dataset.
-            origin: Origin of chain.
+            storage: Backend used to persist the records.
 
         """
-        self._storage = DatasetStorage(storage)
-        self._origin = origin
+        self._storage = dataset_storage(storage)
 
     @property
     def storage(self) -> DatasetStorage:
-        """Backend used to persist the dataset."""
+        """Storage holding the records of the stored methods."""
         return self._storage
-
-    @property
-    def origin(self) -> str:
-        """Origin of chain."""
-        return self._origin
 
 
 T = TypeVar("T", bound=object)
@@ -57,7 +52,7 @@ class StateCodec(Generic[T]):
         """Build the storage path for `key`, adding the format's extension.
 
         Args:
-            key: Name of the record within the storage.
+            key: Name the record is stored under.
 
         Returns:
             The storage path for the record.
@@ -97,26 +92,48 @@ C = TypeVar("C", bound=Chain)
 class BoundStoredMethod(Generic[C, T]):
     """Stored method bound to a chain instance."""
 
-    def __init__(self, obj: C, func: Callable[[C, str], T], codec: StateCodec[T]) -> None:
+    def __init__(
+        self,
+        obj: C,
+        func: Callable[[C, str], T],
+        codec: StateCodec[T],
+        origin: str,
+        key: str,
+    ) -> None:
         """Initialize the bound stored method.
 
         Args:
             obj: Chain instance owning the records.
             func: Chain method computing a record from an item identifier.
             codec: Codec used to encode and decode the records of `func`.
+            origin: Origin the records are stored under.
+            key: Name the records are stored under, before `codec` adds the extension.
 
         """
         self._obj = obj
         self._func = func
         self._codec = codec
-        self._origin = obj.origin
-        self._key = self._codec.path(self._func.__name__)
+        self.origin = origin
+        self.key = key
+        self.filename = self._codec.path(self.key)
+
+    def method(self, uid: str) -> T:
+        """Compute the record of the item `uid`, bypassing the storage.
+
+        Args:
+            uid: Identifier of the processed item.
+
+        Returns:
+            The computed record of the item `uid`.
+
+        """
+        return self._func(self._obj, uid)
 
     def __call__(self, uid: str) -> T:
         """Return the record of the item `uid`, computing and storing it if needed.
 
         Args:
-            uid: Identifier of the dataset item.
+            uid: Identifier of the processed item.
 
         Returns:
             The stored record of the item `uid`.
@@ -124,7 +141,7 @@ class BoundStoredMethod(Generic[C, T]):
         """
         if self.exists(uid):
             return self.pull(uid)
-        record = self._func(self._obj, uid)
+        record = self.method(uid)
         self.push(uid, record=record, force=False)
         return record
 
@@ -132,7 +149,7 @@ class BoundStoredMethod(Generic[C, T]):
         """Read the record of the item `uid` from the storage.
 
         Args:
-            uid: Identifier of the dataset item.
+            uid: Identifier of the processed item.
 
         Returns:
             The stored record of the item `uid`.
@@ -140,8 +157,8 @@ class BoundStoredMethod(Generic[C, T]):
         """
         state = self._obj.storage.pull(
             uid=uid,
-            origin=self._origin,
-            key=self._key,
+            origin=self.origin,
+            key=self.filename,
             state_t=self._codec.state_t,
         )
         return self._codec.decode(state)
@@ -150,34 +167,34 @@ class BoundStoredMethod(Generic[C, T]):
         """Write the `record` of the item `uid` to the storage.
 
         Args:
-            uid: Identifier of the dataset item.
+            uid: Identifier of the processed item.
             record: Record to store.
             force: Whether to overwrite an already stored record.
 
         """
-        state = self._codec.encode(record, path=self._key)
-        self._obj.storage.push(uid=uid, origin=self._origin, state=state, force=force)
+        state = self._codec.encode(record, path=self.filename)
+        self._obj.storage.push(uid=uid, origin=self.origin, state=state, force=force)
 
     def remove(self, uid: str) -> None:
         """Delete the record of the item `uid` from the storage.
 
         Args:
-            uid: Identifier of the dataset item.
+            uid: Identifier of the processed item.
 
         """
-        self._obj.storage.remove(uid=uid, origin=self._origin, key=self._key)
+        self._obj.storage.remove(uid=uid, origin=self.origin, key=self.filename)
 
     def exists(self, uid: str) -> bool:
         """Check whether the record of the item `uid` is stored.
 
         Args:
-            uid: Identifier of the dataset item.
+            uid: Identifier of the processed item.
 
         Returns:
             True if the record is present in the storage.
 
         """
-        return self._obj.storage.exists(uid, origin=self._origin, key=self._key)
+        return self._obj.storage.exists(uid, origin=self.origin, key=self.filename)
 
 
 class StoredMethod(Generic[T]):
@@ -187,12 +204,16 @@ class StoredMethod(Generic[T]):
         self,
         func: Callable[[Any, str], T],
         codec: StateCodec[T],
+        origin: str | None,
+        key: str | None,
     ) -> None:
         """Initialize the stored method.
 
         Args:
             func: Chain method computing a record from an item identifier.
             codec: Codec used to encode and decode the records of `func`.
+            origin: Origin the records are stored under, or None to resolve it on access.
+            key: Name the records are stored under, or None to use the method name.
 
         Raises:
             TypeError: If `func` is not a plain function.
@@ -203,6 +224,50 @@ class StoredMethod(Generic[T]):
             raise TypeError(msg)
         self._func = func
         self._codec = codec
+        self._origin = origin or None
+        self._owner: type | None = None
+        self._key: str = key or ""
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        """Record the class and name the stored method was declared with.
+
+        Args:
+            owner: Class whose body defines this stored method.
+            name: Name the stored method is assigned to.
+
+        """
+        self._origin = self._origin or getattr(owner, "origin", None)
+        self._key = self._key or name
+        self._owner = owner
+
+    def _resolve_origin(self, obj: object) -> str:
+        """Determine the origin to key stored records with.
+
+        Args:
+            obj: Chain instance the method is accessed on.
+
+        Returns:
+            Explicit origin, `obj.origin`, or the owner class name, in that order.
+
+        Raises:
+            RuntimeError: If the stored method was never bound via `__set_name__`.
+
+        """
+        if self._origin is not None:
+            return self._origin
+
+        origin = cast("str | None", getattr(obj, "origin", None))
+        if origin is not None:
+            return origin
+
+        if self._owner is None:
+            msg = "Stored method was never bound to a class via `__set_name__`."
+            raise RuntimeError(msg)
+
+        if origin is None:
+            origin = self._owner.__name__
+
+        return origin
 
     @overload
     def __get__(self, obj: None, objtype: type[C] | None = None) -> Self: ...
@@ -227,17 +292,28 @@ class StoredMethod(Generic[T]):
         """
         if obj is None:
             return self
-        return BoundStoredMethod(obj=obj, func=self._func, codec=self._codec)
+
+        return BoundStoredMethod(
+            obj=obj,
+            func=self._func,
+            codec=self._codec,
+            origin=self._resolve_origin(obj),
+            key=self._key,
+        )
 
 
 def store_as(
     state_t: type[FormatState[T]],
+    origin: str | None = None,
+    key: str | None = None,
     **config: object,
 ) -> Callable[[Callable[[Any, str], T]], StoredMethod[T]]:
     """Store the results of the decorated chain method in the given state format.
 
     Args:
         state_t: State type used to encode and decode the records.
+        origin: Origin the records are stored under, or None to resolve it on access.
+        key: Name the records are stored under, or None to use the method name.
         config: Options forwarded to `state_t` on encoding and decoding.
 
     Returns:
@@ -247,6 +323,6 @@ def store_as(
     codec = StateCodec(state_t, **config)
 
     def decorator(func: Callable[[Any, str], T]) -> StoredMethod[T]:
-        return StoredMethod(func=func, codec=codec)
+        return StoredMethod(func=func, codec=codec, origin=origin, key=key)
 
     return decorator
