@@ -21,6 +21,10 @@ Point = list[float]
 _EPS = 1e-12
 
 
+def _round(value: float) -> float:
+    return round(value, 5)
+
+
 class Patch2D:
     """Region of a plane bounded by four corners.
 
@@ -53,7 +57,7 @@ class Patch2D:
                 self.y3,
                 self.x4,
                 self.y4,
-            ) = (round(v, 5) for point in (p1, p2, p3, p4) for v in point)
+            ) = (_round(v) for point in (p1, p2, p3, p4) for v in point)
         except ValueError as exc:
             msg = "Patch2D requires exactly 4 points of 2 coordinates each"
             raise ValueError(msg) from exc
@@ -572,7 +576,7 @@ class Polygon2D:
 
         """
         try:
-            vertices = [[round(float(x), 5), round(float(y), 5)] for x, y in points]
+            vertices = [[_round(x), _round(y)] for x, y in points]
         except ValueError as exc:
             msg = "Polygon2D vertices must have exactly 2 coordinates each"
             raise ValueError(msg) from exc
