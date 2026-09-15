@@ -1,6 +1,6 @@
 """Tests for the self-intersection check of closed contours."""
 
-from chainset.dtype.points import Box2D
+from chainset.dtype.points import Box2D, Patch2D
 from chainset.utils.contour_intersection import is_self_intersecting
 
 
@@ -26,3 +26,9 @@ def test_zero_height_box_is_self_intersecting() -> None:
     """A box of zero height traces one segment there and back again."""
     flat = Box2D(((0.0, 0.0), (1.0, 0.0))).patch.points
     assert is_self_intersecting(flat)
+
+
+def test_square_patch_with_p4_on_p2_is_self_intersecting() -> None:
+    """Moving `p4` onto `p2` makes the contour run back along its own edges."""
+    patch = Patch2D(((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (1.0, 0.0)))
+    assert is_self_intersecting(patch.points)
