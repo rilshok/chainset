@@ -47,7 +47,7 @@ class PointSequence:
         self.points = [tuple(map(_round, point)) for point in points]
         for index, point in enumerate(self.points):
             if len(point) != dim:
-                msg = f"Point {index} has {len(point)} coordinates, expected {dim}"
+                msg = f"Point {index} has {len(point)} coordinates, expected {dim}."
                 raise ValueError(msg)
 
     def __len__(self) -> int:
@@ -73,15 +73,54 @@ class PointSequence:
         return f"{type(self).__name__}({self.points})"
 
 
-class Box2D(PointSequence):
+class PointSequence2D(PointSequence):
     def __init__(self, points: Iterable[Iterable[float]]) -> None:
-        super().__init__(points, dim=2)
+        super().__init__(points=points, dim=2)
+
+    @classmethod
+    def from_pixels(
+        cls,
+        points: Iterable[Iterable[float]],
+        width: int,
+        height: int,
+    ) -> Self:
+        """Build a shape from pixel coordinates, relative to the image size.
+
+        Args:
+            points: `(x, y)` points in pixels, in order.
+            width: Width of the image the points were measured in.
+            height: Height of the image the points were measured in.
+
+        Returns:
+            The same shape with points in `[0, 1]` for points inside the image.
+
+        """
+        shape = cls(points)
+        return cls((x / width, y / height) for x, y in shape.points)
+
+    def to_pixels(self, width: int, height: int) -> Self:
+        """Scale the relative points back to pixel coordinates.
+
+        Args:
+            width: Width of the image to measure the points in.
+            height: Height of the image to measure the points in.
+
+        Returns:
+            The same shape with points expressed in pixels.
+
+        """
+        return type(self)((x * width, y * height) for x, y in self.points)
+
+
+class Box2D(PointSequence2D):
+    def __init__(self, points: Iterable[Iterable[float]]) -> None:
+        super().__init__(points)
         if len(self.points) != 4:
-            msg = "Box2D requires exactly 2 points of 2 coordinates each"
+            msg = "Box2D requires exactly 2 points."
             raise ValueError(msg)
 
 
-class Patch2D(PointSequence):
+class Patch2D(PointSequence2D):
     """Region of a plane bounded by four corners.
 
     The corners are stored in order and treated as a closed loop, so `p1`/`p2`
@@ -100,9 +139,9 @@ class Patch2D(PointSequence):
             ValueError: If `points` does not hold four pairs of coordinates.
 
         """
-        super().__init__(points, dim=2)
+        super().__init__(points)
         if len(self.points) != 4:
-            msg = "Patch2D requires exactly 4 points of 2 coordinates each"
+            msg = "Patch2D requires exactly 4 points."
             raise ValueError(msg)
 
     @property
@@ -161,54 +200,6 @@ class Patch2D(PointSequence):
 
         """
         return cls(((xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)))
-
-    @classmethod
-    def from_pixels(
-        cls,
-        points: Iterable[Iterable[float]],
-        width: int,
-        height: int,
-    ) -> Self:
-        """Build a patch from pixel coordinates, relative to the image size.
-
-        Args:
-            points: Exactly four `(x, y)` corners in pixels, in order.
-            width: Width of the image the corners were measured in.
-            height: Height of the image the corners were measured in.
-
-        Returns:
-            The same patch with corners in `[0, 1]` for corners inside the image.
-
-        """
-        patch = cls(points)
-        return cls(
-            (
-                (patch.x1 / width, patch.y1 / height),
-                (patch.x2 / width, patch.y2 / height),
-                (patch.x3 / width, patch.y3 / height),
-                (patch.x4 / width, patch.y4 / height),
-            ),
-        )
-
-    def to_pixels(self, width: int, height: int) -> Self:
-        """Scale the relative corners back to pixel coordinates.
-
-        Args:
-            width: Width of the image to measure the corners in.
-            height: Height of the image to measure the corners in.
-
-        Returns:
-            The same patch with corners expressed in pixels.
-
-        """
-        return type(self)(
-            (
-                (self.x1 * width, self.y1 * height),
-                (self.x2 * width, self.y2 * height),
-                (self.x3 * width, self.y3 * height),
-                (self.x4 * width, self.y4 * height),
-            ),
-        )
 
     @property
     def p1(self) -> Point:
