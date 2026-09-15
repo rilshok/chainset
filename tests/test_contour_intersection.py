@@ -14,3 +14,9 @@ def test_bowtie_is_self_intersecting() -> None:
     """A bowtie crosses itself where its two diagonal edges meet."""
     bowtie = [(0.0, 0.0), (1.0, 1.0), (1.0, 0.0), (0.0, 1.0)]
     assert is_self_intersecting(bowtie)
+
+
+def test_coincident_consecutive_corners_are_not_self_intersecting() -> None:
+    """Two corners in a row at the same point collapse into a single vertex."""
+    contour = [(0.0, 0.0), (1.0, 0.5), (1.0, 0.5), (0.0, 1.0)]
+    assert not is_self_intersecting(contour)
