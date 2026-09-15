@@ -73,6 +73,14 @@ class PointSequence:
         return f"{type(self).__name__}({self.points})"
 
 
+class Box2D(PointSequence):
+    def __init__(self, points: Iterable[Iterable[float]]) -> None:
+        super().__init__(points, dim=2)
+        if len(self.points) != 4:
+            msg = "Box2D requires exactly 2 points of 2 coordinates each"
+            raise ValueError(msg)
+
+
 class Patch2D(PointSequence):
     """Region of a plane bounded by four corners.
 
