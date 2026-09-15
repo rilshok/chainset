@@ -539,7 +539,7 @@ class Patch2DDat(Dat[Patch2D]):
             The eight scaled coordinates, from `p1` to `p4`, as packed floats.
 
         """
-        return struct.pack("<8f", *(round(v * 100, 5) for p in data.points for v in p))
+        return struct.pack(">8f", *(round(v * 100, 5) for p in data.points for v in p))
 
     def parse(self, data: bytes) -> Patch2D:
         """Rebuild a patch from its packed coordinates.
@@ -551,7 +551,7 @@ class Patch2DDat(Dat[Patch2D]):
             The patch the coordinates were taken from.
 
         """
-        values = struct.unpack("<8f", data)
+        values = struct.unpack(">8f", data)
         return Patch2D((values[i] / 100, values[i + 1] / 100) for i in range(0, 8, 2))
 
 
