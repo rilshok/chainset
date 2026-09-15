@@ -50,3 +50,9 @@ def test_bowtie_with_corridor_between_centers_is_not_self_intersecting() -> None
     """A bowtie whose two center visits are pulled apart leaves a corridor between the halves."""
     contour = [(0.0, 0.0), (0.5, 0.4), (1.0, 0.0), (1.0, 1.0), (0.5, 0.6), (0.0, 1.0)]
     assert not is_self_intersecting(contour)
+
+
+def test_bowtie_with_overlapping_centers_is_self_intersecting() -> None:
+    """A bowtie whose two center visits pass each other makes the halves cross."""
+    contour = [(0.0, 0.0), (0.5, 0.6), (1.0, 0.0), (1.0, 1.0), (0.5, 0.4), (0.0, 1.0)]
+    assert is_self_intersecting(contour)
