@@ -6,7 +6,7 @@ __all__ = [
 ]
 import math
 import struct
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from itertools import pairwise
 from typing import SupportsIndex
 
@@ -15,7 +15,7 @@ from iokit import Dat
 from numpy.typing import NDArray
 from typing_extensions import Self
 
-Point = list[float]
+Point = tuple[float, ...]
 
 
 _EPS = 1e-12
@@ -24,6 +24,53 @@ _EPS = 1e-12
 def _round(value: float) -> float:
     value = struct.unpack(">1f", struct.pack(">1f", float(value)))[0]
     return round(value, 5)
+
+
+class PointSequence:
+    """Ordered sequence of points sharing the same number of coordinates."""
+
+    __slots__ = ("points",)
+
+    points: list[Point]
+
+    def __init__(self, points: Iterable[Iterable[float]], dim: int) -> None:
+        """Store the points with every coordinate passed through `_round`.
+
+        Args:
+            points: Points of any count, each holding `dim` coordinates.
+            dim: Number of coordinates every point must have.
+
+        Raises:
+            ValueError: If a point does not hold exactly `dim` coordinates.
+
+        """
+        self.points = [tuple(map(_round, point)) for point in points]
+        for index, point in enumerate(self.points):
+            if len(point) != dim:
+                msg = f"Point {index} has {len(point)} coordinates, expected {dim}"
+                raise ValueError(msg)
+
+    def __len__(self) -> int:
+        """Count the points."""
+        return len(self.points)
+
+    def __iter__(self) -> Iterator[Point]:
+        """Iterate over the points in order."""
+        return iter(self.points)
+
+    def __eq__(self, other: object) -> bool:
+        """Compare shapes of the same type point by point."""
+        if type(other) is not type(self):
+            return NotImplemented
+        return self.points == other.points
+
+    def __hash__(self) -> int:
+        """Hash the type and the points, consistently with `__eq__`."""
+        return hash((type(self), tuple(self.points)))
+
+    def __repr__(self) -> str:
+        """Represent the shape by its class name and points."""
+        return f"{type(self).__name__}({self.points})"
 
 
 class Patch2D:
