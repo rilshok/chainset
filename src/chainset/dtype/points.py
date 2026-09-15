@@ -22,6 +22,7 @@ _EPS = 1e-12
 
 
 def _round(value: float) -> float:
+    value = struct.unpack(">1f", struct.pack(">1f", float(value)))[0]
     return round(value, 5)
 
 
