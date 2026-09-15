@@ -38,3 +38,9 @@ def test_patch_with_p4_on_p2_closed_through_extra_corner_is_not_self_intersectin
     """Closing the degenerate patch through an extra corner leaves a triangle."""
     contour = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (1.0, 0.0), (0.0, 1.0)]
     assert not is_self_intersecting(contour)
+
+
+def test_bowtie_through_center_is_not_self_intersecting() -> None:
+    """A bowtie that visits the center twice only touches itself there."""
+    contour = [(0.0, 0.0), (0.5, 0.5), (1.0, 0.0), (1.0, 1.0), (0.5, 0.5), (0.0, 1.0)]
+    assert not is_self_intersecting(contour)
