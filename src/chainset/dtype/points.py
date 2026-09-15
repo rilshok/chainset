@@ -103,6 +103,13 @@ class PointSequence2D(PointSequence):
         """
         return type(self)((x * width, y * height) for x, y in self.points)
 
+    @property
+    def box(self) -> "Box2D":
+        """Axis-aligned bounding box."""
+        xs = [p[0] for p in self.points]
+        ys = [p[1] for p in self.points]
+        return Box2D(((min(xs), min(ys)), (max(xs), max(ys))))
+
 
 class Box2D(PointSequence2D):
     def __init__(self, points: Iterable[Iterable[float]]) -> None:
@@ -240,22 +247,6 @@ class Patch2D(PointSequence2D):
     def shape_max(self) -> tuple[float, float]:
         """The `width_max` and `height_max` of the patch, as a pair."""
         return self.width_max, self.height_max
-
-    @property
-    def box(self) -> Self:
-        """Axis-aligned bounding box of the patch, as a patch of its own."""
-        xs = (self.x1, self.x2, self.x3, self.x4)
-        ys = (self.y1, self.y2, self.y3, self.y4)
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
-        return type(self)(
-            (
-                (min_x, min_y),
-                (max_x, min_y),
-                (max_x, max_y),
-                (min_x, max_y),
-            ),
-        )
 
     def covered_by(self, other: "Patch2D") -> float:
         """Fraction of this patch's area that lies inside `other`.
