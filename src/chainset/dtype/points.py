@@ -138,6 +138,10 @@ class Box2D(PointSequence2D):
     def patch(self) -> "Patch2D":
         return Patch2D.from_xyxy(self.xmin, self.ymin, self.xmax, self.ymax)
 
+    @property
+    def box(self) -> Self:
+        return self
+
 
 class Patch2D(PointSequence2D):
     """Region of a plane bounded by four corners.
