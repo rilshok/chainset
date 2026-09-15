@@ -66,6 +66,8 @@ class PointSequence:
 
 
 class PointSequence2D(PointSequence):
+    __slots__ = ()
+
     def __init__(self, points: Iterable[Iterable[float]]) -> None:
         super().__init__(points=points, dim=2)
 
@@ -129,6 +131,8 @@ class PointSequence2D(PointSequence):
 
 
 class Box2D(PointSequence2D):
+    __slots__ = ()
+
     def __init__(self, points: Iterable[Iterable[float]]) -> None:
         super().__init__(points)
         if len(self.points) != 2:
@@ -168,6 +172,8 @@ class Patch2D(PointSequence2D):
     span its height. Coordinates are normally kept relative to the image the
     patch was taken from, which makes a patch independent of the image size.
     """
+
+    __slots__ = ()
 
     def __init__(self, points: Iterable[Iterable[float]]) -> None:
         """Store the four corners, rounded to five decimal places.
@@ -624,12 +630,10 @@ class Patch2DDat(Dat[Patch2D]):
         return Patch2D((values[i] / 100, values[i + 1] / 100) for i in range(0, 8, 2))
 
 
-class Polygon2D:
+class Polygon2D(PointSequence2D):
     """Closed polygon bounded by an ordered loop of vertices."""
 
-    __slots__ = ("_vertices",)
-
-    _vertices: list[Point]
+    __slots__ = ()
 
     def __init__(self, points: Iterable[Iterable[float]]) -> None:
         """Store the vertices, rounded to five decimal places.
@@ -644,14 +648,9 @@ class Polygon2D:
             ValueError: If a point is not a pair or fewer than three vertices remain.
 
         """
-        try:
-            vertices = [[_round(x), _round(y)] for x, y in points]
-        except ValueError as exc:
-            msg = "Polygon2D vertices must have exactly 2 coordinates each"
-            raise ValueError(msg) from exc
-        if len(vertices) > 1 and vertices[0] == vertices[-1]:
-            vertices.pop()
-        if len(vertices) < 3:
-            msg = "Polygon2D requires at least 3 vertices"
+        super().__init__(points)
+        if len(self.points) > 1 and self.points[0] == self.points[-1]:
+            self.points.pop()
+        if len(self.points) < 3:
+            msg = "Polygon2D requires at least 3 vertices."
             raise ValueError(msg)
-        self._vertices = vertices
