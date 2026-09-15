@@ -148,6 +148,15 @@ class Patch2D:
         """The four corners in order, from `p1` to `p4`."""
         return [self.p1, self.p2, self.p3, self.p4]
 
+    def to_polygon(self) -> "Polygon2D":
+        """Convert the patch into a quadrilateral polygon.
+
+        Returns:
+            A polygon tracing the four corners, from `p1` to `p4`.
+
+        """
+        return Polygon2D(self.points)
+
     def __repr__(self) -> str:
         """Represent Patch."""
         return f"Patch2D({self.points})"
@@ -540,3 +549,36 @@ class Patch2DDat(Dat[Patch2D]):
         """
         values = struct.unpack("<8f", data)
         return Patch2D((values[i] / 100, values[i + 1] / 100) for i in range(0, 8, 2))
+
+
+class Polygon2D:
+    """Closed polygon bounded by an ordered loop of vertices."""
+
+    __slots__ = ("_vertices",)
+
+    _vertices: list[Point]
+
+    def __init__(self, points: Iterable[Iterable[float]]) -> None:
+        """Store the vertices, rounded to five decimal places.
+
+        A trailing vertex equal to the first one is treated as an explicit
+        closing of the loop and dropped.
+
+        Args:
+            points: At least three `(x, y)` vertices, in loop order.
+
+        Raises:
+            ValueError: If a point is not a pair or fewer than three vertices remain.
+
+        """
+        try:
+            vertices = [[round(float(x), 5), round(float(y), 5)] for x, y in points]
+        except ValueError as exc:
+            msg = "Polygon2D vertices must have exactly 2 coordinates each"
+            raise ValueError(msg) from exc
+        if len(vertices) > 1 and vertices[0] == vertices[-1]:
+            vertices.pop()
+        if len(vertices) < 3:
+            msg = "Polygon2D requires at least 3 vertices"
+            raise ValueError(msg)
+        self._vertices = vertices
