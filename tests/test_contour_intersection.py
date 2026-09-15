@@ -20,3 +20,9 @@ def test_coincident_consecutive_corners_are_not_self_intersecting() -> None:
     """Two corners in a row at the same point collapse into a single vertex."""
     contour = [(0.0, 0.0), (1.0, 0.5), (1.0, 0.5), (0.0, 1.0)]
     assert not is_self_intersecting(contour)
+
+
+def test_zero_height_box_is_self_intersecting() -> None:
+    """A box of zero height traces one segment there and back again."""
+    flat = Box2D(((0.0, 0.0), (1.0, 0.0))).patch.points
+    assert is_self_intersecting(flat)
