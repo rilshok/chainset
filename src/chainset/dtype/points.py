@@ -114,7 +114,7 @@ class PointSequence2D(PointSequence):
 class Box2D(PointSequence2D):
     def __init__(self, points: Iterable[Iterable[float]]) -> None:
         super().__init__(points)
-        if len(self.points) != 4:
+        if len(self.points) != 2:
             msg = "Box2D requires exactly 2 points."
             raise ValueError(msg)
 
