@@ -6,7 +6,7 @@ __all__ = [
 ]
 import math
 import struct
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from itertools import pairwise
 from typing import SupportsIndex
 
@@ -49,14 +49,6 @@ class PointSequence:
             if len(point) != dim:
                 msg = f"Point {index} has {len(point)} coordinates, expected {dim}."
                 raise ValueError(msg)
-
-    def __len__(self) -> int:
-        """Count the points."""
-        return len(self.points)
-
-    def __iter__(self) -> Iterator[Point]:
-        """Iterate over the points in order."""
-        return iter(self.points)
 
     def __eq__(self, other: object) -> bool:
         """Compare shapes of the same type point by point."""
