@@ -103,6 +103,23 @@ class PointSequence2D(PointSequence):
         """
         return type(self)((x * width, y * height) for x, y in self.points)
 
+    def translate(self, x: float = 0.0, y: float = 0.0) -> Self:
+        """Move the shape by a linear offset along both axes at once.
+
+        The offset is expressed in the shape's own coordinate frame, so for a
+        shape in normalized image coordinates `x` and `y` are fractions of the
+        image width and height.
+
+        Args:
+            x: Offset added to every point's x coordinate.
+            y: Offset added to every point's y coordinate.
+
+        Returns:
+            The same shape with all points moved.
+
+        """
+        return type(self)((px + x, py + y) for px, py in self.points)
+
     @property
     def box(self) -> "Box2D":
         """Axis-aligned bounding box."""
@@ -468,30 +485,6 @@ class Patch2D(PointSequence2D):
                 glob.point_of(self.p3),
                 glob.point_of(self.p4),
             ],
-        )
-
-    def translate(self, x: float = 0.0, y: float = 0.0) -> Self:
-        """Move the patch by a linear offset along both axes at once.
-
-        The offset is expressed in the patch's own coordinate frame, so for a
-        patch in normalized image coordinates `x` and `y` are fractions of the
-        image width and height.
-
-        Args:
-            x: Offset added to every corner's x coordinate.
-            y: Offset added to every corner's y coordinate.
-
-        Returns:
-            A new `Patch2D` with all four corners moved.
-
-        """
-        return type(self)(
-            (
-                (self.x1 + x, self.y1 + y),
-                (self.x2 + x, self.y2 + y),
-                (self.x3 + x, self.y3 + y),
-                (self.x4 + x, self.y4 + y),
-            ),
         )
 
     def shift(self, k: int) -> Self:
