@@ -6,8 +6,7 @@ __all__ = [
 ]
 import math
 import struct
-from collections.abc import Callable, Iterable, Sequence
-from itertools import pairwise
+from collections.abc import Callable, Iterable
 from typing import SupportsIndex
 
 import numpy as np
@@ -15,10 +14,10 @@ from iokit import Dat
 from numpy.typing import NDArray
 from typing_extensions import Self
 
+from chainset.utils.bilinear_quad import quad_meshgrid, quad_point_at, quad_point_of
+from chainset.utils.polygon_area import quad_coverage, signed_area
+
 Point = tuple[float, ...]
-
-
-_EPS = 1e-12
 
 
 def _round(value: float) -> float:
@@ -298,11 +297,7 @@ class Patch2D(PointSequence2D):
     def covered_by(self, other: "Patch2D") -> float:
         """Fraction of this patch's area that lies inside `other`.
 
-        Both patches are arbitrary quadrilaterals, not bounding boxes. Clipping
-        needs a convex window, so `other` is fanned into two triangles from its
-        first corner. The fan is exact for a non-convex `other` too, as long as
-        each triangle contributes with the sign of its winding: the part of the
-        fan that falls outside `other` is then cancelled out.
+        Both patches are arbitrary quadrilaterals, not bounding boxes.
 
         Args:
             other: The covering patch.
@@ -311,24 +306,7 @@ class Patch2D(PointSequence2D):
             A value in `[0, 1]`; `0.0` when this patch is degenerate.
 
         """
-        polygon = self.points
-        area = abs(_shoelace(polygon))
-        if area <= _EPS:
-            return 0.0
-
-        a, b, c, d = other.points
-        covered = 0.0
-        for triangle in ((a, b, c), (a, c, d)):
-            if abs(signed := _shoelace(triangle)) <= _EPS:
-                continue
-            window = triangle if signed > 0.0 else triangle[::-1]
-            clipped = polygon
-            for p, q in pairwise([*window, window[0]]):
-                clipped = _clip(clipped, p, q)
-                if not clipped:
-                    break
-            covered += math.copysign(abs(_shoelace(clipped)), signed)
-        return min(abs(covered) / area, 1.0)
+        return quad_coverage(self.points, other.points)
 
     def _apply(self, fn: Callable[[float], float]) -> Self:
         return type(self)(
@@ -372,29 +350,7 @@ class Patch2D(PointSequence2D):
             `(height, width)`.
 
         """
-
-        def _linspace(
-            p1: Point | NDArray[np.float32],
-            p2: Point | NDArray[np.float32],
-            length: int,
-        ) -> NDArray[np.float32]:
-            points, step = np.linspace(
-                p1,
-                p2,
-                length,
-                endpoint=False,
-                retstep=True,
-                dtype=np.float32,
-            )
-            # `retstep` hands back a float64 step, which would upcast the sum.
-            return points + np.asarray(step / 2, dtype=np.float32)
-
-        xy = _linspace(
-            _linspace(self.p1, self.p2, width),
-            _linspace(self.p4, self.p3, width),
-            height,
-        )
-        return xy[..., 0], xy[..., 1]
+        return quad_meshgrid(self.points, width, height)
 
     def point_at(self, point: Point) -> Point:
         """Map a unit-square `point` into the `Patch2D` via bilinear interpolation.
@@ -406,13 +362,7 @@ class Patch2D(PointSequence2D):
             The interpolated point inside the `Patch2D`.
 
         """
-        i, j = point
-        a, b = 1.0 - i, 1.0 - j
-
-        x = a * b * self.x1 + i * b * self.x2 + i * j * self.x3 + a * j * self.x4
-        y = a * b * self.y1 + i * b * self.y2 + i * j * self.y3 + a * j * self.y4
-
-        return x, y
+        return quad_point_at(self.points, point)
 
     def project_into(self, glob: "Patch2D") -> Self:
         """Project this patch's corners into `glob` as normalized coordinates.
@@ -436,8 +386,8 @@ class Patch2D(PointSequence2D):
     def point_of(self, point: Point) -> Point:
         """Map a `point` of the `Patch2D` frame back to the unit square.
 
-        Inverse of `point_at`: solves the bilinear map for the normalized
-        coordinates that `point_at` would send to `point`.
+        Inverse of `point_at`: finds the normalized coordinates that `point_at`
+        would send to `point`.
 
         Args:
             point: Coordinates in the same frame as this `Patch2D`.
@@ -447,27 +397,7 @@ class Patch2D(PointSequence2D):
             the `Patch2D`, extrapolated outside otherwise.
 
         """
-        x, y = point
-
-        bx, by = self.x2 - self.x1, self.y2 - self.y1
-        cx, cy = self.x4 - self.x1, self.y4 - self.y1
-        dx = self.x1 - self.x2 + self.x3 - self.x4
-        dy = self.y1 - self.y2 + self.y3 - self.y4
-        qx, qy = x - self.x1, y - self.y1
-
-        j = _solve_bilinear_root(
-            a=cy * dx - cx * dy,
-            b=qx * dy - qy * dx + bx * cy - by * cx,
-            c=qx * by - qy * bx,
-        )
-
-        den_x, den_y = bx + j * dx, by + j * dy
-        if abs(den_x) >= abs(den_y):
-            i = (qx - j * cx) / den_x if abs(den_x) > _EPS else 0.0
-        else:
-            i = (qy - j * cy) / den_y if abs(den_y) > _EPS else 0.0
-
-        return i, j
+        return quad_point_of(self.points, point)
 
     def project_from(self, glob: "Patch2D") -> Self:
         """Express this patch in `glob`'s normalized frame.
@@ -507,95 +437,6 @@ class Patch2D(PointSequence2D):
         k %= 4
         points = self.points
         return type(self)(points[k:] + points[:k])
-
-
-def _shoelace(polygon: Sequence[Point]) -> float:
-    """Signed polygon area, positive when the vertices wind counter-clockwise.
-
-    Coordinates are taken relative to the first vertex, so a polygon far from
-    the origin does not lose precision to large cancelling cross products, and
-    the terms are summed with `math.fsum` to avoid accumulated rounding error.
-
-    Args:
-        polygon: Vertices of a closed polygon in order.
-
-    Returns:
-        The signed area, or `0.0` for fewer than three vertices.
-
-    """
-    if len(polygon) < 3:
-        return 0.0
-    ox, oy = polygon[0]
-    rel = [(x - ox, y - oy) for x, y in polygon[1:]]
-    return math.fsum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in pairwise(rel)) / 2.0
-
-
-def _clip(polygon: Sequence[Point], p: Point, q: Point) -> list[Point]:
-    """Clip a non-empty `polygon` to the left half-plane of the line `p -> q`.
-
-    Args:
-        polygon: Vertices of the subject polygon in order.
-        p: Origin of the directed line.
-        q: Target of the directed line.
-
-    Returns:
-        The clipped polygon, empty when nothing survives.
-
-    """
-    (px, py), (qx, qy) = p, q
-    ex, ey = qx - px, qy - py
-
-    result: list[Point] = []
-    ax, ay = polygon[-1]
-    before = ex * (ay - py) - ey * (ax - px)
-    for point in polygon:
-        bx, by = point
-        side = ex * (by - py) - ey * (bx - px)
-        if (side >= 0.0) != (before >= 0.0):
-            step = before / (before - side)
-            result.append((ax + (bx - ax) * step, ay + (by - ay) * step))
-        if side >= 0.0:
-            result.append(point)
-        ax, ay, before = bx, by, side
-    return result
-
-
-def _unit_interval_distance(value: float) -> float:
-    """Measure how far `value` falls outside the unit interval.
-
-    Args:
-        value: The value to measure.
-
-    Returns:
-        The distance to `[0, 1]`, or `0.0` for a value inside it.
-
-    """
-    return max(0.0, -value, value - 1.0)
-
-
-def _solve_bilinear_root(a: float, b: float, c: float) -> float:
-    """Solve `a * t^2 + b * t + c = 0`, preferring a root inside `[0, 1]`.
-
-    Uses the cancellation-free form of the quadratic formula, which matters
-    because a nearly affine patch makes `a` vanishingly small.
-
-    Args:
-        a: Quadratic coefficient; zero for an affine (non-warped) patch.
-        b: Linear coefficient.
-        c: Constant coefficient.
-
-    Returns:
-        The root closest to the unit interval, or `0.0` if the equation degenerates.
-
-    """
-    if abs(b) < _EPS and abs(a) < _EPS:
-        return 0.0
-    if abs(a) < _EPS:
-        return -c / b
-    disc = math.sqrt(max(b * b - 4.0 * a * c, 0.0))
-    q = -0.5 * (b + math.copysign(disc, b))
-    roots = (q / a, c / q) if abs(q) > _EPS else (0.0, -b / a)
-    return min(roots, key=lambda t: (_unit_interval_distance(t), abs(t - 0.5)))
 
 
 class Patch2DDat(Dat[Patch2D]):
@@ -657,15 +498,6 @@ class Polygon2D(PointSequence2D):
             raise ValueError(msg)
 
     @property
-    def signed_area(self) -> float:
-        """Area with the sign of the winding: positive counter-clockwise.
-
-        The shoelace formula is exact for simple polygons, convex or not. For a
-        self-intersecting loop, regions wound in opposite directions cancel out.
-        """
-        return _shoelace(self.points)
-
-    @property
     def area(self) -> float:
         """Area enclosed by the polygon, regardless of vertex order."""
-        return abs(self.signed_area)
+        return abs(signed_area(self.points))
