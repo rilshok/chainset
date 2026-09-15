@@ -512,6 +512,10 @@ class Patch2D(PointSequence2D):
 def _shoelace(polygon: Sequence[Point]) -> float:
     """Signed polygon area, positive when the vertices wind counter-clockwise.
 
+    Coordinates are taken relative to the first vertex, so a polygon far from
+    the origin does not lose precision to large cancelling cross products, and
+    the terms are summed with `math.fsum` to avoid accumulated rounding error.
+
     Args:
         polygon: Vertices of a closed polygon in order.
 
@@ -521,12 +525,9 @@ def _shoelace(polygon: Sequence[Point]) -> float:
     """
     if len(polygon) < 3:
         return 0.0
-    total = 0.0
-    x0, y0 = polygon[-1]
-    for x1, y1 in polygon:
-        total += x0 * y1 - x1 * y0
-        x0, y0 = x1, y1
-    return total / 2.0
+    ox, oy = polygon[0]
+    rel = [(x - ox, y - oy) for x, y in polygon[1:]]
+    return math.fsum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in pairwise(rel)) / 2.0
 
 
 def _clip(polygon: Sequence[Point], p: Point, q: Point) -> list[Point]:
@@ -654,3 +655,17 @@ class Polygon2D(PointSequence2D):
         if len(self.points) < 3:
             msg = "Polygon2D requires at least 3 vertices."
             raise ValueError(msg)
+
+    @property
+    def signed_area(self) -> float:
+        """Area with the sign of the winding: positive counter-clockwise.
+
+        The shoelace formula is exact for simple polygons, convex or not. For a
+        self-intersecting loop, regions wound in opposite directions cancel out.
+        """
+        return _shoelace(self.points)
+
+    @property
+    def area(self) -> float:
+        """Area enclosed by the polygon, regardless of vertex order."""
+        return abs(self.signed_area)
