@@ -73,7 +73,7 @@ class PointSequence:
         return f"{type(self).__name__}({self.points})"
 
 
-class Patch2D:
+class Patch2D(PointSequence):
     """Region of a plane bounded by four corners.
 
     The corners are stored in order and treated as a closed loop, so `p1`/`p2`
@@ -81,8 +81,6 @@ class Patch2D:
     span its height. Coordinates are normally kept relative to the image the
     patch was taken from, which makes a patch independent of the image size.
     """
-
-    __slots__ = ("x1", "x2", "x3", "x4", "y1", "y2", "y3", "y4")
 
     def __init__(self, points: Iterable[Iterable[float]]) -> None:
         """Store the four corners, rounded to five decimal places.
@@ -94,21 +92,50 @@ class Patch2D:
             ValueError: If `points` does not hold four pairs of coordinates.
 
         """
-        try:
-            p1, p2, p3, p4 = points
-            (
-                self.x1,
-                self.y1,
-                self.x2,
-                self.y2,
-                self.x3,
-                self.y3,
-                self.x4,
-                self.y4,
-            ) = (_round(v) for point in (p1, p2, p3, p4) for v in point)
-        except ValueError as exc:
+        super().__init__(points, dim=2)
+        if len(self.points) != 4:
             msg = "Patch2D requires exactly 4 points of 2 coordinates each"
-            raise ValueError(msg) from exc
+            raise ValueError(msg)
+
+    @property
+    def x1(self) -> float:
+        """X coordinate of the first corner."""
+        return self.points[0][0]
+
+    @property
+    def y1(self) -> float:
+        """Y coordinate of the first corner."""
+        return self.points[0][1]
+
+    @property
+    def x2(self) -> float:
+        """X coordinate of the second corner."""
+        return self.points[1][0]
+
+    @property
+    def y2(self) -> float:
+        """Y coordinate of the second corner."""
+        return self.points[1][1]
+
+    @property
+    def x3(self) -> float:
+        """X coordinate of the third corner."""
+        return self.points[2][0]
+
+    @property
+    def y3(self) -> float:
+        """Y coordinate of the third corner."""
+        return self.points[2][1]
+
+    @property
+    def x4(self) -> float:
+        """X coordinate of the fourth corner."""
+        return self.points[3][0]
+
+    @property
+    def y4(self) -> float:
+        """Y coordinate of the fourth corner."""
+        return self.points[3][1]
 
     @classmethod
     def from_xyxy(cls, xmin: float, ymin: float, xmax: float, ymax: float) -> Self:
@@ -178,27 +205,22 @@ class Patch2D:
     @property
     def p1(self) -> Point:
         """First corner, as `[x, y]`."""
-        return [self.x1, self.y1]
+        return self.x1, self.y1
 
     @property
     def p2(self) -> Point:
         """Second corner, across the width from `p1`."""
-        return [self.x2, self.y2]
+        return self.x2, self.y2
 
     @property
     def p3(self) -> Point:
         """Third corner, opposite `p1`."""
-        return [self.x3, self.y3]
+        return self.x3, self.y3
 
     @property
     def p4(self) -> Point:
         """Fourth corner, across the height from `p1`."""
-        return [self.x4, self.y4]
-
-    @property
-    def points(self) -> list[Point]:
-        """The four corners in order, from `p1` to `p4`."""
-        return [self.p1, self.p2, self.p3, self.p4]
+        return self.x4, self.y4
 
     def to_polygon(self) -> "Polygon2D":
         """Convert the patch into a quadrilateral polygon.
@@ -361,7 +383,7 @@ class Patch2D:
         x = a * b * self.x1 + i * b * self.x2 + i * j * self.x3 + a * j * self.x4
         y = a * b * self.y1 + i * b * self.y2 + i * j * self.y3 + a * j * self.y4
 
-        return [x, y]
+        return x, y
 
     def project_into(self, glob: "Patch2D") -> Self:
         """Project this patch's corners into `glob` as normalized coordinates.
@@ -416,7 +438,7 @@ class Patch2D:
         else:
             i = (qy - j * cy) / den_y if abs(den_y) > _EPS else 0.0
 
-        return [i, j]
+        return i, j
 
     def project_from(self, glob: "Patch2D") -> Self:
         """Express this patch in `glob`'s normalized frame.
@@ -525,7 +547,7 @@ def _clip(polygon: Sequence[Point], p: Point, q: Point) -> list[Point]:
         side = ex * (by - py) - ey * (bx - px)
         if (side >= 0.0) != (before >= 0.0):
             step = before / (before - side)
-            result.append([ax + (bx - ax) * step, ay + (by - ay) * step])
+            result.append((ax + (bx - ax) * step, ay + (by - ay) * step))
         if side >= 0.0:
             result.append(point)
         ax, ay, before = bx, by, side
