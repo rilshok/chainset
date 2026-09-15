@@ -118,6 +118,26 @@ class Box2D(PointSequence2D):
             msg = "Box2D requires exactly 2 points."
             raise ValueError(msg)
 
+    @property
+    def xmin(self) -> float:
+        return self.points[0][0]
+
+    @property
+    def ymin(self) -> float:
+        return self.points[0][1]
+
+    @property
+    def xmax(self) -> float:
+        return self.points[1][0]
+
+    @property
+    def ymax(self) -> float:
+        return self.points[1][1]
+
+    @property
+    def patch(self) -> "Patch2D":
+        return Patch2D.from_xyxy(self.xmin, self.ymin, self.xmax, self.ymax)
+
 
 class Patch2D(PointSequence2D):
     """Region of a plane bounded by four corners.
