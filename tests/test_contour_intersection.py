@@ -30,5 +30,11 @@ def test_zero_height_box_is_self_intersecting() -> None:
 
 def test_square_patch_with_p4_on_p2_is_self_intersecting() -> None:
     """Moving `p4` onto `p2` makes the contour run back along its own edges."""
-    patch = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (1.0, 0.0)]
-    assert is_self_intersecting(patch)
+    contour = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (1.0, 0.0)]
+    assert is_self_intersecting(contour)
+
+
+def test_patch_with_p4_on_p2_closed_through_extra_corner_is_not_self_intersecting() -> None:
+    """Closing the degenerate patch through an extra corner leaves a triangle."""
+    contour = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (1.0, 0.0), (0.0, 1.0)]
+    assert not is_self_intersecting(contour)
