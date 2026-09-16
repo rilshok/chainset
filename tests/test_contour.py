@@ -1,8 +1,8 @@
-"""Tests for the self-intersection check of closed contours."""
+"""Tests for the validity check of closed contours."""
 
 import pytest
 
-from chainset.utils.contour_intersection import is_self_intersecting
+from chainset.utils.contour_validity import is_valid_contour
 
 Contour = list[tuple[float, float]]
 
@@ -197,6 +197,38 @@ ZERO_WIDTH_BRIDGE = [
     (-0.5, -0.5),
 ]
 
+# A vertex that passes through an edge instead of stopping on it.
+VERTEX_CROSSING = [
+    (0.0, 0.0),
+    (4.0, 0.0),
+    (4.0, 2.0),
+    (2.0, 0.0),
+    (2.0, -2.0),
+    (0.0, -2.0),
+]
+
+# A slot of zero width, cut into an edge and walked along both of its sides.
+PARTIAL_OVERLAP = [
+    (0.0, 0.0),
+    (3.0, 0.0),
+    (3.0, 1.0),
+    (2.0, 1.0),
+    (2.0, 0.0),
+    (1.0, 0.0),
+    (1.0, 1.0),
+    (0.0, 1.0),
+]
+
+# Three edges through one point, none of them changing the side the object is on.
+TRIPLE_POINT = [
+    (2.0, 3.0),
+    (3.0, 2.0),
+    (0.0, 1.0),
+    (0.0, 2.0),
+    (3.0, 1.0),
+    (1.0, 0.0),
+]
+
 
 # A valid contour is a closed curve that bounds an object of non-zero area. Every
 # portion of it with non-zero length separates the object from the background, and the
@@ -208,16 +240,17 @@ ZERO_WIDTH_BRIDGE = [
 VALID_CONTOURS: list[Contour] = [
     SQUARE,
     DOUBLED_CORNER,
-    CENTER_TOUCH,  # has problem
+    CENTER_TOUCH,
     CENTER_CORRIDOR,
     CLOCKWISE_SQUARE,
     MIDEDGE_VERTEX,
     L_SHAPE,
     CLOSED_SQUARE,
     NARROW_CORRIDOR,
-    VERTEX_ON_EDGE,  # has problem
-    TOUCHING_HOLE,  # has problem
+    VERTEX_ON_EDGE,
+    TOUCHING_HOLE,
     KEYHOLE,
+    TRIPLE_POINT,
 ]
 
 INVALID_CONTOURS: list[Contour] = [
@@ -226,10 +259,10 @@ INVALID_CONTOURS: list[Contour] = [
     PATCH_P4_ON_P2,
     WHISKER,
     CROSSED_CENTERS,
-    EMPTY,  # has problem
-    SINGLE_POINT,  # has problem
+    EMPTY,
+    SINGLE_POINT,
     TWO_POINTS,
-    COINCIDENT_POINTS,  # has problem
+    COINCIDENT_POINTS,
     COLLINEAR_POINTS,
     SHARED_VERTEX_LOOPS,
     DOUBLED_SQUARE,
@@ -237,16 +270,18 @@ INVALID_CONTOURS: list[Contour] = [
     CROSSED_CLOSING_EDGE,
     SAME_WINDING_LOOP,
     ZERO_WIDTH_BRIDGE,
+    VERTEX_CROSSING,
+    PARTIAL_OVERLAP,
 ]
 
 
 @pytest.mark.parametrize("contour", VALID_CONTOURS)
-def test_valid_contour_does_not_intersect_itself(contour: Contour) -> None:
-    """A valid contour bounds a shape without meeting itself."""
-    assert not is_self_intersecting(contour)
+def test_valid_contour(contour: Contour) -> None:
+    """A valid contour bounds an object of non-zero area."""
+    assert is_valid_contour(contour)
 
 
 @pytest.mark.parametrize("contour", INVALID_CONTOURS)
-def test_invalid_contour_intersects_itself(contour: Contour) -> None:
-    """An invalid contour crosses or touches itself somewhere."""
-    assert is_self_intersecting(contour)
+def test_invalid_contour(contour: Contour) -> None:
+    """An invalid contour bounds nothing, or bounds it from both sides."""
+    assert not is_valid_contour(contour)
