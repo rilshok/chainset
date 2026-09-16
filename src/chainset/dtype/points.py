@@ -15,6 +15,7 @@ from numpy.typing import NDArray
 from typing_extensions import Self
 
 from chainset.utils.bilinear_quad import quad_meshgrid, quad_point_at, quad_point_of
+from chainset.utils.contour_validity import is_valid_contour
 from chainset.utils.polygon_area import quad_coverage, signed_area
 
 Point = tuple[float, ...]
@@ -177,16 +178,24 @@ class Patch2D(PointSequence2D):
     def __init__(self, points: Iterable[Iterable[float]]) -> None:
         """Store the four corners, rounded to five decimal places.
 
+        The corners have to trace a valid contour: a quadrilateral of non-zero
+        area whose sides do not cross, so that the patch covers a region of the
+        plane exactly once.
+
         Args:
             points: Exactly four `(x, y)` corners, in order.
 
         Raises:
-            ValueError: If `points` does not hold four pairs of coordinates.
+            ValueError: If `points` does not hold four pairs of coordinates, or
+                the corners do not trace a valid contour.
 
         """
         super().__init__(points)
         if len(self.points) != 4:
             msg = "Patch2D requires exactly 4 points."
+            raise ValueError(msg)
+        if not is_valid_contour(self.points):
+            msg = "Patch2D requires corners that bound an area without crossing."
             raise ValueError(msg)
 
     @property
@@ -481,13 +490,16 @@ class Polygon2D(PointSequence2D):
         """Store the vertices, rounded to five decimal places.
 
         A trailing vertex equal to the first one is treated as an explicit
-        closing of the loop and dropped.
+        closing of the loop and dropped. The loop has to bound an object of
+        non-zero area, keeping it on the same side all the way round; loops
+        that meet at a point are allowed, loops that cross are not.
 
         Args:
             points: At least three `(x, y)` vertices, in loop order.
 
         Raises:
-            ValueError: If a point is not a pair or fewer than three vertices remain.
+            ValueError: If a point is not a pair, fewer than three vertices
+                remain, or the vertices do not trace a valid contour.
 
         """
         super().__init__(points)
@@ -495,6 +507,9 @@ class Polygon2D(PointSequence2D):
             self.points.pop()
         if len(self.points) < 3:
             msg = "Polygon2D requires at least 3 vertices."
+            raise ValueError(msg)
+        if not is_valid_contour(self.points):
+            msg = "Polygon2D requires a contour that bounds an area without crossing itself."
             raise ValueError(msg)
 
     @property
