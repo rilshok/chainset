@@ -3,6 +3,7 @@
 import pytest
 
 from chainset.utils.contour_validity import is_valid_contour
+from chainset.utils.polygon_area import signed_area
 
 Contour = list[tuple[float, float]]
 
@@ -285,3 +286,48 @@ def test_valid_contour(contour: Contour) -> None:
 def test_invalid_contour(contour: Contour) -> None:
     """An invalid contour bounds nothing, or bounds it from both sides."""
     assert not is_valid_contour(contour)
+
+
+# The signed area every contour above encloses, worked out by hand. A contour that
+# winds clockwise encloses a negative area, and one that encloses nothing, or encloses
+# as much one way round as the other, encloses zero.
+
+AREAS: list[tuple[Contour, float]] = [
+    (SQUARE, 1.0),
+    (DOUBLED_CORNER, 0.5),
+    (CENTER_TOUCH, 0.5),
+    (CENTER_CORRIDOR, 0.6),
+    (CLOCKWISE_SQUARE, -4.0),
+    (MIDEDGE_VERTEX, 4.0),
+    (L_SHAPE, 4.0),
+    (CLOSED_SQUARE, 4.0),
+    (NARROW_CORRIDOR, 20000.2),
+    (VERTEX_ON_EDGE, 4.0),
+    (TOUCHING_HOLE, 14.0),
+    (KEYHOLE, 11.2),
+    (BOWTIE, 0.0),
+    (FLAT_BOX, 0.0),
+    (PATCH_P4_ON_P2, 0.0),
+    (WHISKER, 0.5),
+    (CROSSED_CENTERS, 0.4),
+    (EMPTY, 0.0),
+    (SINGLE_POINT, 0.0),
+    (TWO_POINTS, 0.0),
+    (COINCIDENT_POINTS, 0.0),
+    (COLLINEAR_POINTS, 0.0),
+    (SHARED_VERTEX_LOOPS, 0.0),
+    (DOUBLED_SQUARE, 8.0),
+    (PENTAGRAM, 5.8844),
+    (CROSSED_CLOSING_EDGE, 0.0),
+    (SAME_WINDING_LOOP, 18.0),
+    (ZERO_WIDTH_BRIDGE, 3.0),
+    (VERTEX_CROSSING, -2.0),
+    (PARTIAL_OVERLAP, 2.0),
+    (TRIPLE_POINT, -3.0),
+]
+
+
+@pytest.mark.parametrize(("contour", "expected"), AREAS)
+def test_signed_area(contour: Contour, expected: float) -> None:
+    """The shoelace sum reproduces the area worked out by hand."""
+    assert signed_area(contour) == pytest.approx(expected, abs=1e-9)
