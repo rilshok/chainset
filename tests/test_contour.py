@@ -2,6 +2,7 @@
 
 import pytest
 
+from chainset.dtype.points import Polygon2D
 from chainset.utils.contour_validity import is_valid_contour
 from chainset.utils.polygon_area import signed_area
 
@@ -286,6 +287,29 @@ def test_valid_contour(contour: Contour) -> None:
 def test_invalid_contour(contour: Contour) -> None:
     """An invalid contour bounds nothing, or bounds it from both sides."""
     assert not is_valid_contour(contour)
+
+
+# A polygon repairs what it is given before judging it, so an invalid contour
+# whose only flaw encloses nothing still becomes a polygon.
+REPAIRABLE_CONTOURS: list[Contour] = [WHISKER]
+
+
+@pytest.mark.parametrize("contour", VALID_CONTOURS + REPAIRABLE_CONTOURS)
+def test_valid_contour_builds_a_polygon(contour: Contour) -> None:
+    """A valid contour is taken as it is."""
+    assert Polygon2D(contour).area > 0.0
+
+
+BEYOND_REPAIR: list[Contour] = [
+    contour for contour in INVALID_CONTOURS if contour not in REPAIRABLE_CONTOURS
+]
+
+
+@pytest.mark.parametrize("contour", BEYOND_REPAIR)
+def test_contour_beyond_repair_is_rejected(contour: Contour) -> None:
+    """No repair turns a contour that crosses itself into a polygon."""
+    with pytest.raises(ValueError, match="Polygon2D requires"):
+        Polygon2D(contour)
 
 
 # The signed area every contour above encloses, worked out by hand. A contour that

@@ -27,6 +27,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from fractions import Fraction
 from functools import cmp_to_key
 
+from chainset.utils.contour_normalization import contour_loop
 from chainset.utils.polygon_area import signed_area
 
 Point = tuple[float, float]
@@ -70,7 +71,7 @@ def is_valid_contour(points: Iterable[Iterable[float]]) -> bool:
         ValueError: If a point does not hold exactly two coordinates.
 
     """
-    loop = _loop(points)
+    loop = contour_loop(points)
     if len(loop) < 3 or signed_area(loop) == 0.0:
         return False
 
@@ -108,19 +109,6 @@ def is_valid_contour(points: Iterable[Iterable[float]]) -> bool:
         )
 
     return _places_agree(loop, edges, through)
-
-
-def _loop(points: Iterable[Iterable[float]]) -> list[Point]:
-    """Drop the points that repeat the one before them, and the closing point."""
-    loop: list[Point] = []
-    for point in points:
-        x, y = point
-        vertex = (float(x), float(y))
-        if not loop or vertex != loop[-1]:
-            loop.append(vertex)
-    while len(loop) > 1 and loop[0] == loop[-1]:
-        loop.pop()
-    return loop
 
 
 def _boxes(edges: Sequence[Edge]) -> list[Box]:

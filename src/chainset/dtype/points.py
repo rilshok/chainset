@@ -15,6 +15,7 @@ from numpy.typing import NDArray
 from typing_extensions import Self
 
 from chainset.utils.bilinear_quad import quad_meshgrid, quad_point_at, quad_point_of
+from chainset.utils.contour_normalization import normalize_contour
 from chainset.utils.contour_validity import is_valid_contour
 from chainset.utils.polygon_area import quad_coverage, signed_area
 
@@ -489,10 +490,11 @@ class Polygon2D(PointSequence2D):
     def __init__(self, points: Iterable[Iterable[float]]) -> None:
         """Store the vertices, rounded to five decimal places.
 
-        A trailing vertex equal to the first one is treated as an explicit
-        closing of the loop and dropped. The loop has to bound an object of
-        non-zero area, keeping it on the same side all the way round; loops
-        that meet at a point are allowed, loops that cross are not.
+        What says nothing about the bounded region is dropped first: vertices
+        repeated in a row, a trailing vertex closing the loop, and excursions
+        that leave a vertex and come straight back. What is left has to bound
+        an object of non-zero area, keeping it on the same side all the way
+        round; loops that meet at a point are allowed, loops that cross are not.
 
         Args:
             points: At least three `(x, y)` vertices, in loop order.
@@ -502,9 +504,7 @@ class Polygon2D(PointSequence2D):
                 remain, or the vertices do not trace a valid contour.
 
         """
-        super().__init__(points)
-        if len(self.points) > 1 and self.points[0] == self.points[-1]:
-            self.points.pop()
+        super().__init__(normalize_contour(points))
         if len(self.points) < 3:
             msg = "Polygon2D requires at least 3 vertices."
             raise ValueError(msg)
