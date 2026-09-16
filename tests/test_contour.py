@@ -208,15 +208,15 @@ ZERO_WIDTH_BRIDGE = [
 VALID_CONTOURS: list[Contour] = [
     SQUARE,
     DOUBLED_CORNER,
-    # CENTER_TOUCH, # has problem
+    CENTER_TOUCH,  # has problem
     CENTER_CORRIDOR,
     CLOCKWISE_SQUARE,
     MIDEDGE_VERTEX,
     L_SHAPE,
     CLOSED_SQUARE,
     NARROW_CORRIDOR,
-    # VERTEX_ON_EDGE,# has problem
-    # TOUCHING_HOLE,# has problem
+    VERTEX_ON_EDGE,  # has problem
+    TOUCHING_HOLE,  # has problem
     KEYHOLE,
 ]
 
@@ -226,10 +226,10 @@ INVALID_CONTOURS: list[Contour] = [
     PATCH_P4_ON_P2,
     WHISKER,
     CROSSED_CENTERS,
-    # EMPTY,  # has problem
-    # SINGLE_POINT,  # has problem
+    EMPTY,  # has problem
+    SINGLE_POINT,  # has problem
     TWO_POINTS,
-    # COINCIDENT_POINTS,  # has problem
+    COINCIDENT_POINTS,  # has problem
     COLLINEAR_POINTS,
     SHARED_VERTEX_LOOPS,
     DOUBLED_SQUARE,
