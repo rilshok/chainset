@@ -198,6 +198,13 @@ ZERO_WIDTH_BRIDGE = [
 ]
 
 
+# A valid contour is a closed curve that bounds an object of non-zero area. Every
+# portion of it with non-zero length separates the object from the background, and the
+# object always lies on the same side of the direction of traversal. A point belongs to
+# the object if a ray cast from it crosses the contour once more in one direction than
+# in the other, and to the background if the crossings in the two directions are equal
+# in number.
+
 VALID_CONTOURS: list[Contour] = [
     SQUARE,
     DOUBLED_CORNER,
