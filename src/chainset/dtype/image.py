@@ -21,7 +21,7 @@ from iokit.state import Image as ImageFormatState
 from numpy.typing import NDArray
 from PIL import Image as PILImage
 
-from chainset.dtype.patch import Patch2D
+from chainset.dtype.points import Patch2D
 from chainset.utils.image_patch_sampling import WHITE, FillValue, sample_quad_uint8
 
 RGBArray = NDArray[np.uint8]
