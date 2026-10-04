@@ -10,13 +10,15 @@ authors = [
 ]
 dependencies = [
     "typing-extensions>=4.8.0",
-    "iokit>=0.5.1,<0.6.0",
+    "iokit>=0.6.0,<0.7.0",
 ]
 
 [project.optional-dependencies]
 ultra = [
     "numpy>=1.21.1",
-    "pillow",
+    "pillow>=9.1",
+    "python-dateutil>=2.8.2",
+    "requests>=2.32.3",
 ]
 
 [dependency-groups]
@@ -78,3 +80,19 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["PLR2004", "PLR0915", "S101", "S106", "ANN201", "SLF001"]
+
+[tool.coverage.run]
+source = ["chainset"]
+branch = true
+omit = ["tests/*"]
+
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "@overload",
+    "raise NotImplementedError",
+    "\\.\\.\\.$",
+]

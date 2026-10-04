@@ -2,8 +2,8 @@
 
 import pytest
 
-from chainset.dtype.points import Polygon2D
-from chainset.utils.contour_validity import is_valid_contour
+from chainset.dtype.points import Patch2D, Polygon2D
+from chainset.utils.contour_validity import is_convex_contour, is_valid_contour
 from chainset.utils.polygon_area import signed_area
 
 Contour = list[tuple[float, float]]
@@ -355,3 +355,49 @@ AREAS: list[tuple[Contour, float]] = [
 def test_signed_area(contour: Contour, expected: float) -> None:
     """The shoelace sum reproduces the area worked out by hand."""
     assert signed_area(contour) == pytest.approx(expected, abs=1e-9)
+
+
+TRAPEZOID = [(0.0, 0.0), (4.0, 0.0), (3.0, 2.0), (1.0, 2.0)]
+CONVEX_KITE = [(0.0, 0.0), (2.0, -1.0), (3.0, 0.0), (2.0, 1.0)]
+TILTED_SQUARE = [(0.0, 1.0), (1.0, 0.0), (2.0, 1.0), (1.0, 2.0)]
+
+# The fourth corner points inwards.
+DART = [(0.0, 0.0), (2.0, 1.0), (0.0, 2.0), (0.5, 1.0)]
+
+# The second corner lies on a straight edge.
+STRAIGHT_CORNER = [(0.0, 0.0), (1.0, 0.0), (2.0, 0.0), (1.0, 1.0)]
+
+CONVEX_QUADS: list[Contour] = [SQUARE, CLOCKWISE_SQUARE, TRAPEZOID, CONVEX_KITE, TILTED_SQUARE]
+
+NON_CONVEX_QUADS: list[Contour] = [
+    DART,
+    STRAIGHT_CORNER,
+    DOUBLED_CORNER,
+    MIDEDGE_VERTEX,
+    BOWTIE,
+    FLAT_BOX,
+    PATCH_P4_ON_P2,
+]
+
+
+@pytest.mark.parametrize("contour", CONVEX_QUADS)
+def test_convex_quad_is_a_patch(contour: Contour) -> None:
+    """A strictly convex quadrilateral is a patch."""
+    assert is_convex_contour(contour)
+    assert Patch2D(contour).points == [tuple(point) for point in contour]
+
+
+@pytest.mark.parametrize("contour", NON_CONVEX_QUADS)
+def test_non_convex_quad_is_rejected(contour: Contour) -> None:
+    """Any other quadrilateral is not a patch."""
+    assert not is_convex_contour(contour)
+    with pytest.raises(ValueError, match="Patch2D requires"):
+        Patch2D(contour)
+
+
+def test_convexity_of_longer_contours() -> None:
+    """A convex pentagon passes; concave outlines, stars and repeats do not."""
+    pentagon = [(0.0, 2.0), (-1.9, 0.62), (-1.18, -1.62), (1.18, -1.62), (1.9, 0.62)]
+    assert is_convex_contour(pentagon)
+    for contour in (L_SHAPE, PENTAGRAM, CENTER_TOUCH, [*pentagon, pentagon[0]]):
+        assert not is_convex_contour(contour)
