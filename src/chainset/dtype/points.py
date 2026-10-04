@@ -3,10 +3,12 @@
 __all__ = [
     "Patch2D",
     "Patch2DDat",
+    "PatchMapping",
 ]
 import math
 import struct
 from collections.abc import Callable, Iterable
+from enum import Enum
 from typing import SupportsIndex
 
 import numpy as np
@@ -16,10 +18,28 @@ from typing_extensions import Self
 
 from chainset.utils.bilinear_quad import quad_meshgrid, quad_point_at, quad_point_of
 from chainset.utils.contour_normalization import normalize_contour
-from chainset.utils.contour_validity import is_valid_contour
+from chainset.utils.contour_validity import is_convex_contour, is_valid_contour
+from chainset.utils.homography import (
+    homography_meshgrid,
+    homography_point_at,
+    homography_point_of,
+)
 from chainset.utils.polygon_area import quad_coverage, signed_area
 
 Point = tuple[float, ...]
+
+
+class PatchMapping(Enum):
+    """How the unit square maps onto a patch.
+
+    Attributes:
+        PERSPECTIVE: Homography; undoes perspective and antialiases.
+        BILINEAR: Bilinear interpolation between the corners.
+
+    """
+
+    PERSPECTIVE = "perspective"
+    BILINEAR = "bilinear"
 
 
 def _round(value: float) -> float:
@@ -179,24 +199,19 @@ class Patch2D(PointSequence2D):
     def __init__(self, points: Iterable[Iterable[float]]) -> None:
         """Store the four corners, rounded to five decimal places.
 
-        The corners have to trace a valid contour: a quadrilateral of non-zero
-        area whose sides do not cross, so that the patch covers a region of the
-        plane exactly once.
-
         Args:
             points: Exactly four `(x, y)` corners, in order.
 
         Raises:
-            ValueError: If `points` does not hold four pairs of coordinates, or
-                the corners do not trace a valid contour.
+            ValueError: If `points` is not four corners of a strictly convex quadrilateral.
 
         """
         super().__init__(points)
         if len(self.points) != 4:
             msg = "Patch2D requires exactly 4 points."
             raise ValueError(msg)
-        if not is_valid_contour(self.points):
-            msg = "Patch2D requires corners that bound an area without crossing."
+        if not is_convex_contour(self.points):
+            msg = "Patch2D requires corners that bound a convex area, turning the same way."
             raise ValueError(msg)
 
     @property
@@ -344,6 +359,8 @@ class Patch2D(PointSequence2D):
         self,
         width: int,
         height: int,
+        *,
+        mode: PatchMapping | str = PatchMapping.PERSPECTIVE,
     ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
         """Sample a grid of `height` by `width` cell centers spanning the patch.
 
@@ -354,31 +371,58 @@ class Patch2D(PointSequence2D):
         Args:
             width: Number of samples along the `p1` to `p2` direction.
             height: Number of samples along the `p1` to `p4` direction.
+            mode: The mapping, as a `PatchMapping` or its value.
 
         Returns:
             The x and y coordinates of the samples as `float32`, each of shape
             `(height, width)`.
 
-        """
-        return quad_meshgrid(self.points, width, height)
+        Raises:
+            ValueError: If `mode` is not a `PatchMapping`.
 
-    def point_at(self, point: Point) -> Point:
-        """Map a unit-square `point` into the `Patch2D` via bilinear interpolation.
+        """
+        match PatchMapping(mode):
+            case PatchMapping.PERSPECTIVE:
+                return homography_meshgrid(self.points, width, height)
+            case PatchMapping.BILINEAR:
+                return quad_meshgrid(self.points, width, height)
+
+    def point_at(
+        self,
+        point: Point,
+        *,
+        mode: PatchMapping | str = PatchMapping.PERSPECTIVE,
+    ) -> Point:
+        """Map a unit-square `point` into the `Patch2D`.
 
         Args:
             point: Normalized coordinates in `[0, 1] x [0, 1]`.
+            mode: The mapping, as a `PatchMapping` or its value.
 
         Returns:
-            The interpolated point inside the `Patch2D`.
+            The mapped point inside the `Patch2D`.
+
+        Raises:
+            ValueError: If `mode` is not a `PatchMapping`.
 
         """
-        return quad_point_at(self.points, point)
+        match PatchMapping(mode):
+            case PatchMapping.PERSPECTIVE:
+                return homography_point_at(self.points, point)
+            case PatchMapping.BILINEAR:
+                return quad_point_at(self.points, point)
 
-    def project_into(self, glob: "Patch2D") -> Self:
+    def project_into(
+        self,
+        glob: "Patch2D",
+        *,
+        mode: PatchMapping | str = PatchMapping.PERSPECTIVE,
+    ) -> Self:
         """Project this patch's corners into `glob` as normalized coordinates.
 
         Args:
             glob: Parent `Patch2D` whose frame the corners are mapped into.
+            mode: The mapping, as a `PatchMapping` or its value.
 
         Returns:
             This patch expressed in `glob`'s coordinate frame.
@@ -386,39 +430,49 @@ class Patch2D(PointSequence2D):
         """
         return type(self)(
             [
-                glob.point_at(self.p1),
-                glob.point_at(self.p2),
-                glob.point_at(self.p3),
-                glob.point_at(self.p4),
+                glob.point_at(self.p1, mode=mode),
+                glob.point_at(self.p2, mode=mode),
+                glob.point_at(self.p3, mode=mode),
+                glob.point_at(self.p4, mode=mode),
             ],
         )
 
-    def point_of(self, point: Point) -> Point:
+    def point_of(
+        self,
+        point: Point,
+        *,
+        mode: PatchMapping | str = PatchMapping.PERSPECTIVE,
+    ) -> Point:
         """Map a `point` of the `Patch2D` frame back to the unit square.
-
-        Inverse of `point_at`: finds the normalized coordinates that `point_at`
-        would send to `point`.
 
         Args:
             point: Coordinates in the same frame as this `Patch2D`.
+            mode: The mapping, as a `PatchMapping` or its value.
 
         Returns:
-            Normalized coordinates in `[0, 1] x [0, 1]` for points inside
-            the `Patch2D`, extrapolated outside otherwise.
+            Normalized coordinates, extrapolated for points outside the `Patch2D`.
+
+        Raises:
+            ValueError: If `mode` is not a `PatchMapping`.
 
         """
-        return quad_point_of(self.points, point)
+        match PatchMapping(mode):
+            case PatchMapping.PERSPECTIVE:
+                return homography_point_of(self.points, point)
+            case PatchMapping.BILINEAR:
+                return quad_point_of(self.points, point)
 
-    def project_from(self, glob: "Patch2D") -> Self:
-        """Express this patch in `glob`'s normalized frame.
-
-        Inverse of `project_into`: both patches must share a coordinate frame
-        and `glob` is expected to surround this patch. Cutting `glob` out of an
-        image and then cutting the result with the returned patch yields the
-        same crop as cutting the original image with this patch.
+    def project_from(
+        self,
+        glob: "Patch2D",
+        *,
+        mode: PatchMapping | str = PatchMapping.PERSPECTIVE,
+    ) -> Self:
+        """Express this patch in `glob`'s normalized frame; inverse of `project_into`.
 
         Args:
             glob: Surrounding `Patch2D` whose frame this patch is expressed in.
+            mode: The mapping, as a `PatchMapping` or its value.
 
         Returns:
             This patch as normalized coordinates inside `glob`.
@@ -426,10 +480,10 @@ class Patch2D(PointSequence2D):
         """
         return type(self)(
             [
-                glob.point_of(self.p1),
-                glob.point_of(self.p2),
-                glob.point_of(self.p3),
-                glob.point_of(self.p4),
+                glob.point_of(self.p1, mode=mode),
+                glob.point_of(self.p2, mode=mode),
+                glob.point_of(self.p3, mode=mode),
+                glob.point_of(self.p4, mode=mode),
             ],
         )
 

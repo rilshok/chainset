@@ -16,7 +16,9 @@ dependencies = [
 [project.optional-dependencies]
 ultra = [
     "numpy>=1.21.1",
-    "pillow",
+    "pillow>=9.1",
+    "python-dateutil>=2.8.2",
+    "requests>=2.32.3",
 ]
 
 [dependency-groups]

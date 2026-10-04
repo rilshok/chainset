@@ -1,8 +1,9 @@
 """Bilinear sampling of a 2-D image.
 
 `sample_quad_uint8` cuts the quadrilateral named by four corners, which is
-what warping a patch amounts to. Everything outside the image reads a
-constant that defaults to white.
+what warping a patch amounts to; `sample_quad_projective_uint8` does the same
+along the homography, which undoes perspective. Everything outside the image
+reads a constant that defaults to white.
 
 The quadrilateral maps onto the source bilinearly, so a source coordinate is
 an affine ramp along every output row: a band of output rows derives its
@@ -16,6 +17,7 @@ __all__ = [
     "WHITE",
     "Corners",
     "FillValue",
+    "sample_quad_projective_uint8",
     "sample_quad_uint8",
 ]
 
@@ -25,6 +27,8 @@ from typing import cast
 
 import numpy as np
 from numpy.typing import NDArray
+
+from chainset.utils.homography import quad_homography
 
 SampleArray = NDArray[np.uint8] | NDArray[np.float32]
 DifferenceDtype = np.dtype[np.int16] | np.dtype[np.float32]
@@ -153,6 +157,25 @@ def _quad_coordinates(corners: Corners, shape: tuple[int, int], rows: int) -> Co
         stop = min(first + rows, out_height)
         band = down[first:stop, None]
         yield first, stop, starts[0] + band * slopes[0], starts[1] + band * slopes[1]
+
+
+def _projective_coordinates(
+    homography: NDArray[np.float64],
+    shape: tuple[int, int],
+    rows: int,
+) -> Coordinates:
+    """Yield the source coordinates of each band of output rows under `homography`."""
+    # Plain floats keep the bands in single precision.
+    (a, b, c), (d, e, f), (g, h, i) = homography.tolist()
+    out_height, out_width = shape
+    across = np.arange(out_width, dtype=np.float32) + _HALF
+    # Terms along a row are shared by every band, so a band costs one add each.
+    row_x, row_y, row_w = a * across, d * across, g * across
+    for first in range(0, out_height, rows):
+        stop = min(first + rows, out_height)
+        down = np.arange(first, stop, dtype=np.float32)[:, None] + _HALF
+        inverse = 1.0 / (row_w + (h * down + i))
+        yield first, stop, (row_x + (b * down + c)) * inverse, (row_y + (e * down + f)) * inverse
 
 
 def _scattered_bands(
@@ -340,4 +363,39 @@ def sample_quad_uint8(
     else:
         coordinates = _quad_coordinates(moved, shape, _rows_per_band(shape[1]))
         bands = _scattered_bands(planes, coordinates, out, difference)
+    return cast("NDArray[np.uint8]", _collect(bands, out, cropped.dtype))
+
+
+def sample_quad_projective_uint8(
+    image: SampleArray,
+    corners: Corners,
+    shape: tuple[int, int],
+    *,
+    fill: FillValue = WHITE,
+) -> NDArray[np.uint8]:
+    """Cut the quadrilateral `corners` out of `image` along its homography.
+
+    Like `sample_quad_uint8`, but output cells follow the projective map of the
+    result onto the quadrilateral, which undoes perspective.
+
+    Args:
+        image: Source of shape `(height, width, channels)`, `uint8` or `float32`.
+        corners: Four corners of a strictly convex quadrilateral, in pixels.
+        shape: Height and width of the result.
+        fill: Value outside the image, one level or one per channel.
+
+    Returns:
+        The cut as `uint8`, of shape `(*shape, channels)`.
+
+    Raises:
+        ValueError: If the image dtype, `corners` or `fill` is unusable.
+
+    """
+    cropped, moved = _crop(image, corners)
+    out, planes, difference = _prepare(cropped, shape, fill, np.dtype(np.uint8))
+    if planes is None:
+        return cast("NDArray[np.uint8]", out)
+    homography = quad_homography(moved) @ np.diag([1.0 / shape[1], 1.0 / shape[0], 1.0])
+    coordinates = _projective_coordinates(homography, shape, _rows_per_band(shape[1]))
+    bands = _scattered_bands(planes, coordinates, out, difference)
     return cast("NDArray[np.uint8]", _collect(bands, out, cropped.dtype))

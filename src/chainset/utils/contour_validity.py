@@ -18,6 +18,7 @@ edges through one point make one place and not three.
 """
 
 __all__ = [
+    "is_convex_contour",
     "is_valid_contour",
 ]
 
@@ -109,6 +110,28 @@ def is_valid_contour(points: Iterable[Iterable[float]]) -> bool:
         )
 
     return _places_agree(loop, edges, through)
+
+
+def is_convex_contour(points: Iterable[Iterable[float]]) -> bool:
+    """Check whether `points` trace a strictly convex contour.
+
+    Args:
+        points: Vertices of the contour in order, as `(x, y)` pairs.
+
+    Returns:
+        `True` if every vertex turns the same way and the loop winds once.
+
+    Raises:
+        ValueError: If a point does not hold exactly two coordinates.
+
+    """
+    loop = [(float(x), float(y)) for x, y in points]
+    size = len(loop)
+    turns = {
+        _orientation(loop[index - 1], vertex, loop[(index + 1) % size])
+        for index, vertex in enumerate(loop)
+    }
+    return size >= 3 and turns in ({1}, {-1}) and (size < 5 or is_valid_contour(loop))
 
 
 def _boxes(edges: Sequence[Edge]) -> list[Box]:
